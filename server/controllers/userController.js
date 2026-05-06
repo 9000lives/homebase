@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const User = require('../models/userModel')
+const req = require('express/lib/request')
 
 // @desc    Register a new user
 // @route   POST /api/users/
@@ -75,6 +76,27 @@ const loginUser = asyncHandler(async (req, res) => {
     }
 })
 
+// @desc    Update a user status
+// @route   PATCH /api/admin/users/:id/status
+// @access  Private (requires valid JWT, and admin role - enforced by the `adminProtect` middlware)
+const updateUserStatus = asyncHandler(async (req, res) => {
+
+    const { status } = req.body
+
+    const user = await User.findById(req.params.id)
+
+    //update just the role then call save() so that our mongoose validation runs
+    user.status = status
+    const updatedUser = await user.save()
+
+    res.status(200).json({
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        status: updatedUser.status
+    })
+})
+
 // @desc    Return the currently authenticated user's profile
 // @route   GET /api/users/me
 // @access  Private (requires a valid JWT — enforced by the `protect` middleware)
@@ -108,5 +130,6 @@ const generateToken = (id) => {
 module.exports = {
     registerUser,
     loginUser,
-    getMe
+    getMe,
+    updateUserStatus
 }

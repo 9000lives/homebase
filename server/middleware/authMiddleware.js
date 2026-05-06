@@ -40,4 +40,16 @@ const protect = asyncHandler(async (req, res, next) => {
     }
 })
 
-module.exports = { protect } // Exports the middleware so routes can import and use it to guard protected endpoints
+const adminProtect = asyncHandler(async (req, res, next) => {
+    // call protect inside of admin protect, then run a check on user role
+    protect(req, res, () => {
+        if (req.user && req.user.role === 'admin') {
+            next()
+        } else {
+            res.status(401)
+            next(new Error('Not authorized'))
+        }
+    })
+})
+
+module.exports = { protect, adminProtect } // Exports the middleware so routes can import and use it to guard protected endpoints
