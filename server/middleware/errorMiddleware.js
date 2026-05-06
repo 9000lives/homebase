@@ -1,4 +1,4 @@
-//Error Middleware from Professor Bibek Upadhayay, temporary?
+//Error Middleware from Professor Bibek Upadhayay!
 
 // by default express sends back hard to understand html error 
 // we want that error in clean json format 
