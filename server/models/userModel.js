@@ -8,8 +8,7 @@ const statusEnum = {
   message: 'enum validator failed for path `{PATH}` with value `{VALUE}`'    
 }
 
-const userSchema = mongoose.Schema(
-    {
+const userSchema = mongoose.Schema({
         email: {
             type: String,
             required: [true, 'Please add an email'],
@@ -39,7 +38,6 @@ const userSchema = mongoose.Schema(
             type: Date,
             default: Date.now
         }
-    }
-)
+})
 
 module.exports = mongoose.model('User', userSchema)

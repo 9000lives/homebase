@@ -1,0 +1,3 @@
+# Ignore all files inside of uploads, but track the folder
+*
+!.gitignore
