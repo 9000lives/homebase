@@ -1,9 +1,9 @@
-> Total Hours Spent: 4
+> Total Hours Spent: 7
 
 # 5/5/2026
 
 Welcome to my devlog! Ill write in here each time I work on this project so that anyone who is interested can
-follow along! (and so I can keep track of what I'm doing lol!)
+follow along as the project evolves over time!
 
 Today is the first day of this project so I did some setting up. Github, VSCode Extenstions, and dependencies.
 
@@ -45,3 +45,31 @@ Finally I connect this method to an endpoint, protected it with our new adminPro
 intially forgot to point my mongo connection to my specfic database and was very confused why my credentials weren't working. Also
 intially forgot to add await before finding the user who's status I wanted to update and was confused why it wasnt finding any users.
 After fixing those two issues our new endpoint is fully functional!
+
+# 5/7/2026
+
+Writing this a few hours later because I had to go to work. But we are back to document what I did today!
+
+Today was one of the most confusing so far but I learned a lot! All the previous functionality I had already dabbled with in class,
+but file upload/download is completely new to me. For this project I am using multer to handle my file uploads, which is completely new to me.
+We added uploadMiddleware, fileModel, folderModel, fileRoutes, fileController. fileModel and folderModel are simply the mongoose Schemas
+for the file and folder objects.
+
+uploadMiddleware creates a multer diskStorage object with the destination, using path.join to get the absolute path no matter where we are
+running our program from. The file name on the actual server is a uuid so that users can upload files with the same name and no collisions will
+happen. We also also create a fileFilter so that we can control what kind of files can be uploaded. Finally we combine these two methods
+in an upload method, and also adding a file size restriction.
+
+fileController allows the user to upload, get, download, and delete files. Overall its pretty simple, the controller doesnt actually upload
+anything, that is the middleware's job, our upload file method in the controller simply creates a cooresponding object in our database
+for each file upload. downloadFile retrives the file, verfies that the person requesting actually owns the file, then sends the file to the 
+client via res.download(). deleteFile does a very similar process, verifying the client's id, then deleting the file from the drive, then 
+deleting the mongoDB object.
+
+fileRoutes simply adds endpoints to each of the controller's functions, and ties the upload middleware to the controller, and protects all of
+it with our authMiddleware. 
+
+We also had to add a little if statement in our server.js file to make sure that our uploads folder actually exsists.
+
+In terms of bugs today it wasn't too bad, I had an issue where I created the fileModel with the parameters parentFolderID, capital I and D, but
+in the fileController was sending parentFolderId, capital I lowercase d.
