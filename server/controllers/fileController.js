@@ -78,4 +78,46 @@ const deleteFile = asyncHandler(async (req, res) => {
     res.json({ message: 'File deleted' })
 })
 
-module.exports = { uploadFile, getFiles, downloadFile, deleteFile }
+// @desc    Update a file name
+// @route   PATCH /api/files/:id/rename
+// @access  Private (requires valid JWT 'protect` middlware)
+const updateFileName = asyncHandler(async (req, res) => {
+
+    const { name } = req.body
+
+    const file = await File.findById(req.params.id)
+
+    //update just the name then call save() so that our mongoose validation runs
+    file.name = name
+    const updatedFile = await file.save()
+
+    res.status(200).json({
+        _id: updatedFile._id,
+        name: updatedFile.name,
+        mimeType: updatedFile.mimeType,
+        parentFolderId: updatedFile.parentFolderId
+    })
+})
+
+// @desc    Update a file's parent folder
+// @route   PATCH /api/files/:id/move
+// @access  Private (requires valid JWT 'protect` middlware)
+const updateFileFolder = asyncHandler(async (req, res) => {
+
+    const { parentFolderId } = req.body
+
+    const file = await File.findById(req.params.id)
+
+    //update just the parentFolderId then call save() so that our mongoose validation runs
+    file.parentFolderId = parentFolderId
+    const updatedFile = await file.save()
+
+    res.status(200).json({
+        _id: updatedFile._id,
+        name: updatedFile.name,
+        mimeType: updatedFile.mimeType,
+        parentFolderId: updatedFile.parentFolderId
+    })
+})
+
+module.exports = { uploadFile, getFiles, downloadFile, deleteFile, updateFileName, updateFileFolder }

@@ -1,4 +1,4 @@
-> Total Hours Spent: 7
+> Total Hours Spent: 10
 
 # 5/5/2026
 
@@ -73,3 +73,23 @@ We also had to add a little if statement in our server.js file to make sure that
 
 In terms of bugs today it wasn't too bad, I had an issue where I created the fileModel with the parameters parentFolderID, capital I and D, but
 in the fileController was sending parentFolderId, capital I lowercase d.
+
+# 5/11/2026
+
+Today we added implementation for folders! I am handling folders such that they do not exsist on the
+actual drive at all, but rather only exsist on the database. Each file and folder object has a 
+parentFolderId field that will only be referenced to when rendering my dashboard on the frontend.
+
+On top of folders we also added the ability to rename and move both files and folders. 
+
+The implementation was pretty straight forward as most of it I was able to copy-paste from the
+file controller and refactor it. The most difficult part of the folder implementation was the
+delete function. Since deleting a folder with things in it should delete all the things inside it,
+sub folders and sub files, this is fairly straight forward with recursion. Simply fetch all sub
+folders of the folder you're deleting then recurse into those folders first. When you get to a folder that doesn't have any sub folders you can then check the folder for files, delete the files,
+the delete the folder. This chain then works its way back up the recursion. 
+
+After creating a folder router I tested each endpoint, spent about half an hour troubleshooting the 
+delete function wasn't deleting any subfolders or files until I realized it was a simple typo,
+I was searching by parentId not parentFolderId. After fixing that issue it all worked. I believe 
+with folders done I have successfully finished my backend and can now work on building my frontend!

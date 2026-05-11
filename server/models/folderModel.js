@@ -2,7 +2,7 @@ const mongoose = require('mongoose')
 const { Schema } = mongoose
 
 const folderSchema = mongoose.Schema({
-    ownerID: {
+    ownerId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
         required: true
@@ -11,10 +11,9 @@ const folderSchema = mongoose.Schema({
         type: String,
         required: [true, 'Please add a folder name']
     },
-    parentFolderID: {
+    parentFolderId: {
         type: Schema.Types.ObjectId,
         ref: 'Folder',
-        required: true
     },
     createdAt: {
         type: Date,

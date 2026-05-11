@@ -1,6 +1,11 @@
 const express = require('express')
 const router = express.Router()
-const { uploadFile, getFiles, downloadFile, deleteFile } = require('../controllers/fileController')
+const { uploadFile, 
+        getFiles, 
+        downloadFile, 
+        deleteFile, 
+        updateFileName, 
+        updateFileFolder } = require('../controllers/fileController')
 const { protect } = require('../middleware/authMiddleware')
 const upload = require('../middleware/uploadMiddleware')
 
@@ -24,5 +29,15 @@ router.get('/:id/download', protect, downloadFile)
 // Private — protect runs first and verifies the JWT from the Authorization header.
 // Checks if file exsits, verifies the user owns file, then deletes it from the server and the database
 router.delete('/:id/delete', protect, deleteFile)
+
+// PATCH /api/files/:id/rename
+// Private — protect runs first and verifies the JWT from the Authorization header.
+// Checks if file exsits, verifies the user owns file, then updates the name of the file in the database
+router.patch('/:id/rename', protect, updateFileName)
+
+// PATCH /api/files/:id/move
+// Private — protect runs first and verifies the JWT from the Authorization header.
+// Checks if file exsits, verifies the user owns file, then updates the parent folder of the file in the database
+router.patch('/:id/move', protect, updateFileFolder)
 
 module.exports = router
