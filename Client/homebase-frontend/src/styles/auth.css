@@ -1,0 +1,274 @@
+/* ============================================================
+   auth.css — Homebase auth page styles
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Page wrapper ── */
+.auth-background {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f4f8;
+  padding: 24px;
+}
+
+/* ── Card ── */
+.auth-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 40px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 8px 32px rgba(0, 161, 219, 0.10);
+}
+
+/* ── Logo ── */
+.auth-header {
+  text-align: center;
+}
+
+.auth-logo {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  margin-bottom: 8px;
+  user-select: none;
+}
+
+.logo-home {
+  color: #111827;
+}
+
+.logo-base {
+  color: #00a1db;
+}
+
+.logo-divider {
+  width: 32px;
+  height: 3px;
+  background: #00a1db;
+  border-radius: 2px;
+  margin: 0 auto 0;
+}
+
+/* ── Error Banner ──
+   Hidden by default; add class .error-banner--visible to reveal.
+   Animates open with height/opacity so it doesn't cause a layout jump.
+   ── */
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  color: #991b1b;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow: hidden;
+
+  /* Animation start state */
+  max-height: 0;
+  opacity: 0;
+  padding: 0 14px;
+  margin-top: 0;
+  margin-bottom: 0;
+  transition:
+    max-height 0.28s ease,
+    opacity    0.28s ease,
+    margin-top 0.28s ease,
+    margin-bottom 0.28s ease,
+    padding-top 0.28s ease,
+    padding-bottom 0.28s ease;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.error-banner--visible {
+  max-height: 100px;
+  opacity: 1;
+  margin-top: 16px;
+  margin-bottom: 4px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.error-banner__icon {
+  flex-shrink: 0;
+  font-size: 15px;
+  margin-top: 1px;
+}
+
+/* ── Form ── */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 28px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.01em;
+}
+
+.form-group input {
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  color: #111827;
+  background: #fafafa;
+  transition:
+    border-color 0.15s ease,
+    box-shadow   0.15s ease,
+    background   0.15s ease;
+  outline: none;
+  width: 100%;
+}
+
+.form-group input:focus {
+  border-color: #00a1db;
+  box-shadow: 0 0 0 3px rgba(0, 161, 219, 0.13);
+  background: #fff;
+}
+
+.form-group input::placeholder {
+  color: #9ca3af;
+}
+
+.form-group input.input--error {
+  border-color: #f87171;
+}
+
+/* ── Submit button ── */
+.auth-button {
+  margin-top: 6px;
+  background: #00a1db;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition:
+    background  0.15s ease,
+    transform   0.1s ease,
+    box-shadow  0.15s ease;
+}
+
+.auth-button:hover:not(:disabled) {
+  background: #0082b0;
+  box-shadow: 0 4px 14px rgba(0, 161, 219, 0.28);
+}
+
+.auth-button:active:not(:disabled) {
+  background: #006b94;
+  transform: scale(0.985);
+}
+
+.auth-button:disabled {
+  opacity: 0.60;
+  cursor: not-allowed;
+}
+
+/* ── Footer link ── */
+.auth-footer {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 13.5px;
+  color: #6b7280;
+}
+
+.auth-footer a {
+  color: #00a1db;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ── Spinner in button ── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* ── Loading screen (while auth context initialises) ── */
+.auth-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f4f8;
+}
+
+.auth-loading__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #00a1db;
+  display: inline-block;
+  margin: 0 4px;
+  animation: bounce 0.9s infinite alternate;
+}
+.auth-loading__dot:nth-child(2) { animation-delay: 0.2s; }
+.auth-loading__dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+  from { transform: translateY(0); opacity: 0.6; }
+  to   { transform: translateY(-10px); opacity: 1; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 32px 24px;
+    border-radius: 12px;
+  }
+  .auth-logo {
+    font-size: 28px;
+  }
+}
