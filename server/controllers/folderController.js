@@ -97,6 +97,16 @@ const updateFolderName = asyncHandler(async (req, res) => {
 
     const folder = await Folder.findById(req.params.id)
 
+    if (!folder) {
+        res.status(404)
+        throw new Error('Folder not found')
+    }
+
+    if (folder.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to update this folder')
+    }
+
     //update just the name then call save() so that our mongoose validation runs
     folder.name = name
     const updatedFolder = await folder.save()
@@ -116,6 +126,16 @@ const updateFolderParent = asyncHandler(async (req, res) => {
     const { parentFolderId } = req.body
 
     const folder = await Folder.findById(req.params.id)
+
+    if (!folder) {
+        res.status(404)
+        throw new Error('Folder not found')
+    }
+
+    if (folder.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to update this folder')
+    }
 
     //update just the parentFolderId then call save() so that our mongoose validation runs
     folder.parentFolderId = parentFolderId

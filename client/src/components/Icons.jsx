@@ -43,3 +43,47 @@ export const FileIcon = () => (
     </text>
   </svg>
 );
+
+export const KebabIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+    <circle cx="12" cy="5" r="1.8" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+    <circle cx="12" cy="19" r="1.8" fill="currentColor" />
+  </svg>
+);
+
+export const PencilIcon = () => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+    <path d="M12 20h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path
+      d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+    <path
+      d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const CloseIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+    <path
+      d="M6 6l12 12M18 6L6 18"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+  </svg>
+);

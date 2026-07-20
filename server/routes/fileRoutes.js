@@ -1,10 +1,11 @@
 const express = require('express')
 const router = express.Router()
-const { uploadFile, 
-        getFiles, 
-        downloadFile, 
-        deleteFile, 
-        updateFileName, 
+const { uploadFile,
+        getFiles,
+        downloadFile,
+        viewFile,
+        deleteFile,
+        updateFileName,
         updateFileFolder } = require('../controllers/fileController')
 const { protect } = require('../middleware/authMiddleware')
 const upload = require('../middleware/uploadMiddleware')
@@ -24,6 +25,11 @@ router.get('/', protect, getFiles)
 // Private — protect runs first and verifies the JWT from the Authorization header.
 // Calls the res.download to attach the specified file as an attachment to the request
 router.get('/:id/download', protect, downloadFile)
+
+// GET /api/files/:id/view
+// Private — protect runs first and verifies the JWT from the Authorization header.
+// Serves the file inline (Content-Type set, no attachment disposition) for previewing in the browser
+router.get('/:id/view', protect, viewFile)
 
 // DELETE /api/files/:id/delete
 // Private — protect runs first and verifies the JWT from the Authorization header.

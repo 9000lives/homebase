@@ -30,7 +30,7 @@ const uploadFile = asyncHandler(async (req, res) => {
 const getFiles = asyncHandler(async (req, res) => {
     const files = await File.find({
         ownerId: req.user.id,
-        parentFolderId: req.query.folderId || null
+        parentFolderId: req.query.parentFolderId || null
     })
     res.json(files)
 })
@@ -53,6 +53,27 @@ const downloadFile = asyncHandler(async (req, res) => {
     }
 
     res.download(path.resolve(file.storagePath), file.name)
+})
+
+// @desc    Serve a file inline for preview (no forced download)
+// @route   GET /api/files/:id/view
+// @access  Private (requires valid JWT)
+const viewFile = asyncHandler(async (req, res) => {
+    const file = await File.findById(req.params.id)
+
+    if (!file) {
+        res.status(404)
+        throw new Error('File not found')
+    }
+
+    // make sure the requesting user owns this file
+    if (file.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to access this file')
+    }
+
+    res.setHeader('Content-Type', file.mimeType)
+    res.sendFile(path.resolve(file.storagePath))
 })
 
 // @desc    Delete a file
@@ -87,6 +108,16 @@ const updateFileName = asyncHandler(async (req, res) => {
 
     const file = await File.findById(req.params.id)
 
+    if (!file) {
+        res.status(404)
+        throw new Error('File not found')
+    }
+
+    if (file.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to update this file')
+    }
+
     //update just the name then call save() so that our mongoose validation runs
     file.name = name
     const updatedFile = await file.save()
@@ -108,6 +139,16 @@ const updateFileFolder = asyncHandler(async (req, res) => {
 
     const file = await File.findById(req.params.id)
 
+    if (!file) {
+        res.status(404)
+        throw new Error('File not found')
+    }
+
+    if (file.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to update this file')
+    }
+
     //update just the parentFolderId then call save() so that our mongoose validation runs
     file.parentFolderId = parentFolderId
     const updatedFile = await file.save()
@@ -120,4 +161,4 @@ const updateFileFolder = asyncHandler(async (req, res) => {
     })
 })
 
-module.exports = { uploadFile, getFiles, downloadFile, deleteFile, updateFileName, updateFileFolder }
+module.exports = { uploadFile, getFiles, downloadFile, viewFile, deleteFile, updateFileName, updateFileFolder }

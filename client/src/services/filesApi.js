@@ -134,30 +134,52 @@ export const uploadFile = (file, parentFolderId = null) => {
   });
 };
 
-// ── ✏️  RENAME (optional — wire up later) ───────────────────
+// ── RENAME ───────────────────────────────────────────────────
 export const renameFolder = (id, name) =>
-  apiFetch(`${FOLDERS_API_URL}/${id}`, {
+  apiFetch(`${FOLDERS_API_URL}/${id}/rename`, {
     method:  'PATCH',
     headers: buildJsonHeaders(),
     body:    JSON.stringify({ name }),
   });
 
 export const renameFile = (id, name) =>
-  apiFetch(`${FILES_API_URL}/${id}`, {
+  apiFetch(`${FILES_API_URL}/${id}/rename`, {
     method:  'PATCH',
     headers: buildJsonHeaders(),
     body:    JSON.stringify({ name }),
   });
 
-// ── ✏️  DELETE (optional — wire up later) ───────────────────
+// ── DELETE ───────────────────────────────────────────────────
 export const deleteFolder = (id) =>
-  apiFetch(`${FOLDERS_API_URL}/${id}`, {
+  apiFetch(`${FOLDERS_API_URL}/${id}/delete`, {
     method:  'DELETE',
     headers: buildJsonHeaders(),
   });
 
 export const deleteFile = (id) =>
-  apiFetch(`${FILES_API_URL}/${id}`, {
+  apiFetch(`${FILES_API_URL}/${id}/delete`, {
     method:  'DELETE',
     headers: buildJsonHeaders(),
   });
+
+// ── PREVIEW / DOWNLOAD ──────────────────────────────────────
+// Auth is header-based, so a plain <img>/<iframe>/<a> src can't include
+// the token — fetch the file as a Blob instead and hand the caller an
+// object URL (via URL.createObjectURL) to use as the src/href.
+const fetchBlob = async (url) => {
+  const response = await fetch(url, {
+    method:  'GET',
+    headers: buildJsonHeaders(),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw body;
+  }
+  return response.blob();
+};
+
+// GET /api/files/:id/view — inline-served bytes, correct Content-Type, no forced download
+export const fetchFilePreview = (id) => fetchBlob(`${FILES_API_URL}/${id}/view`);
+
+// GET /api/files/:id/download — same bytes, but the server sends Content-Disposition: attachment
+export const fetchFileForDownload = (id) => fetchBlob(`${FILES_API_URL}/${id}/download`);

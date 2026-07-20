@@ -5,10 +5,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { fetchDirectoryContents, createFolder, uploadFile } from '../services/filesApi';
+import {
+  fetchDirectoryContents,
+  createFolder,
+  uploadFile,
+  renameFile,
+  renameFolder,
+  deleteFile,
+  deleteFolder,
+} from '../services/filesApi';
 import Header from '../components/Header';
 import FileTile from '../components/FileTile';
 import NewItemModal from '../components/NewItemModal';
+import RenameModal from '../components/RenameModal';
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
+import PreviewModal from '../components/PreviewModal';
 import '../styles/dashboard.css';
 
 /**
@@ -39,6 +50,11 @@ const Dashboard = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [creating,  setCreating]  = useState(false);
 
+  const [renameTarget, setRenameTarget]   = useState(null);   // item being renamed, or null
+  const [deleteTarget, setDeleteTarget]   = useState(null);   // item pending delete confirm, or null
+  const [previewTarget, setPreviewTarget] = useState(null);   // file being previewed, or null
+  const [actionLoading, setActionLoading] = useState(false);
+
   // ── Load contents of the current folder ───────────────────
   const loadItems = useCallback(async (parentFolderId) => {
     if (!ownerId) return;   // wait until the user is loaded
@@ -67,7 +83,7 @@ const Dashboard = () => {
 
   const handleTileClick = (item) => {
     if (item.type !== 'folder') {
-      // ✏️  Hook up file-open / preview behavior here later
+      setPreviewTarget(item);
       return;
     }
     setBreadcrumbs((prev) => [...prev, { id: item._id, name: item.name }]);
@@ -115,6 +131,50 @@ const Dashboard = () => {
       setModalOpen(false);
     } finally {
       setCreating(false);
+    }
+  };
+
+  // ── Rename / Delete ──────────────────────────────────────
+
+  const handleRenameSubmit = async (newName) => {
+    setActionLoading(true);
+    try {
+      if (renameTarget.type === 'folder') {
+        await renameFolder(renameTarget._id, newName);
+      } else {
+        await renameFile(renameTarget._id, newName);
+      }
+      setRenameTarget(null);
+      await loadItems(currentFolderId);   // refresh the tile grid
+    } catch (err) {
+      setError(err.message ?? 'Could not rename. Please try again.');
+      setRenameTarget(null);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    setActionLoading(true);
+    try {
+      if (deleteTarget.type === 'folder') {
+        await deleteFolder(deleteTarget._id);
+        // If the deleted folder is an ancestor of where we currently are,
+        // our view is no longer valid — bounce back to root.
+        if (breadcrumbs.some((crumb) => crumb.id === deleteTarget._id)) {
+          setBreadcrumbs([]);
+          setCurrentFolderId(null);
+        }
+      } else {
+        await deleteFile(deleteTarget._id);
+      }
+      setDeleteTarget(null);
+      await loadItems(currentFolderId);   // refresh the tile grid
+    } catch (err) {
+      setError(err.message ?? 'Could not delete. Please try again.');
+      setDeleteTarget(null);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -189,7 +249,13 @@ const Dashboard = () => {
         ) : (
           <div className="file-grid">
             {items.map((item) => (
-              <FileTile key={item._id} item={item} onClick={handleTileClick} />
+              <FileTile
+                key={item._id}
+                item={item}
+                onClick={handleTileClick}
+                onRename={setRenameTarget}
+                onDelete={setDeleteTarget}
+              />
             ))}
           </div>
         )}
@@ -203,6 +269,28 @@ const Dashboard = () => {
           onUploadFile={handleUploadFile}
           loading={creating}
         />
+      )}
+
+      {renameTarget && (
+        <RenameModal
+          item={renameTarget}
+          onClose={() => setRenameTarget(null)}
+          onSubmit={handleRenameSubmit}
+          loading={actionLoading}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          item={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+          loading={actionLoading}
+        />
+      )}
+
+      {previewTarget && (
+        <PreviewModal item={previewTarget} onClose={() => setPreviewTarget(null)} />
       )}
     </div>
   );

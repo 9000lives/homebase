@@ -9,9 +9,12 @@
 //  which is how Express recognizes it as an ERROR middleware, not a regular one
 const errorHandler = (err, req, res, next) =>{
 
-    // Check if a status code was already set on the response (e.g., 400, 404 from a controller) 
+    // Check if a status code was already set on the response (e.g., 400, 404 from a controller)
     //  if not, default to 500 (Internal Server Error)
-    const statusCode  = res.statusCode ? res.statusCode : 500 ; 
+    // res.statusCode defaults to 200, and this handler only ever runs when
+    // something threw, so seeing 200 here means no controller set a real
+    // error status — treat that case as unset and fall back to 500.
+    const statusCode  = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500 ;
 
     // Set the HTTP status code on the response 
     //  this tells the client what kind of error occurred (400 = bad request, 404 = not found, 500 = server error)
