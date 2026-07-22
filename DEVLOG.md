@@ -93,3 +93,10 @@ After creating a folder router I tested each endpoint, spent about half an hour 
 delete function wasn't deleting any subfolders or files until I realized it was a simple typo,
 I was searching by parentId not parentFolderId. After fixing that issue it all worked. I believe 
 with folders done I have successfully finished my backend and can now work on building my frontend!
+
+# 7/20/2026
+
+Used Claude Code for the first time today, I didn't realize how powerful of a tool that it really is. Used it to finish up most of my dashboard today,
+not only did it catch a couple errors I had made, but then after it added the features I requested, went back a verified they all worked by opening it on my 
+browser and manipulating it automatically. Crazy stuff! I had only really ever used AI to find errors in my code previously so using it to create whole features is a 
+brand new world to me. With the help of Claude we added rename/delete to files, previews and dowloads, and fixed a navigation bug. I hope to start work on the setting menu next!

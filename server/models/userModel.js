@@ -34,6 +34,29 @@ const userSchema = mongoose.Schema({
             enum: statusEnum,
             default: 'pending'
         },
+        twoFactorEnabled: {
+            type: Boolean,
+            default: false
+        },
+        twoFactorCodeHash: {
+            type: String,
+            default: null,
+            select: false
+        },
+        twoFactorCodeExpires: {
+            type: Date,
+            default: null,
+            select: false
+        },
+        twoFactorCodeAttempts: {
+            type: Number,
+            default: 0,
+            select: false
+        },
+        twoFactorTrustedUntil: {
+            type: Date,
+            default: null
+        },
         createdAt: {
             type: Date,
             default: Date.now

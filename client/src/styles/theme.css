@@ -1,0 +1,42 @@
+/* ============================================================
+   theme.css — CSS custom properties for light/dark theming.
+   Toggled via ThemeContext, which sets data-theme on <html>.
+   ============================================================ */
+
+:root {
+  --color-bg: #f0f4f8;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f0f4f8;
+  --color-surface-alt-hover: #e5e7eb;
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-text-subtle: #9ca3af;
+  --color-accent: #00a1db;
+  --color-accent-hover: #0082b0;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fca5a5;
+  --color-success: #16a34a;
+  --color-input-bg: #fafafa;
+  --color-overlay: rgba(17, 24, 39, 0.45);
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #0f1115;
+  --color-surface: #1a1d23;
+  --color-surface-alt: #22262e;
+  --color-surface-alt-hover: #2e333d;
+  --color-border: #2e333d;
+  --color-text: #f3f4f6;
+  --color-text-muted: #9aa2b1;
+  --color-text-subtle: #6b7280;
+  --color-accent: #00a1db;
+  --color-accent-hover: #33b5e6;
+  --color-danger: #f87171;
+  --color-danger-bg: #3a1c1c;
+  --color-danger-border: #7f2d2d;
+  --color-success: #4ade80;
+  --color-input-bg: #14171c;
+  --color-overlay: rgba(0, 0, 0, 0.65);
+}

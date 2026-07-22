@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
 
     verifyToken()
       .then((data) => {
-        // GET /me returns { id, displayName, email, role } — no nesting
+        // GET /me returns { id, displayName, email, role, twoFactorEnabled } — no nesting
         setUser(data);
       })
       .catch(() => clearSession())
@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Called after login or signup.
-  // loginUser / signupUser both return { _id, name, email, token }.
+  // loginUser / signupUser both return { _id, name, email, token, twoFactorEnabled }.
   // We normalise to { id, name, email } so the shape is consistent
   // with what components read after a page refresh (from /me).
   const login = (rawUser, token) => {
@@ -40,18 +40,28 @@ export const AuthProvider = ({ children }) => {
       name:        rawUser.name,
       email:       rawUser.email,
       displayName: rawUser.name,   // /me uses displayName; mirror it here
+      twoFactorEnabled: !!rawUser.twoFactorEnabled,
     };
     persistSession(token, user);
     setUser(user);
   };
 
-  const logout = () => {
-    logoutUser();   // clears localStorage
+  const logout = async () => {
+    await logoutUser();   // revokes the 2FA trust window server-side, then clears localStorage
     setUser(null);
   };
 
+  // Re-fetches /me and refreshes the cached user object — used after
+  // settings changes (username, 2FA) so the UI reflects the new state
+  // without a full page reload.
+  const refreshUser = async () => {
+    const data = await verifyToken();
+    setUser(data);
+    return data;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser, loading }}>
       {children}
     </AuthContext.Provider>
   );

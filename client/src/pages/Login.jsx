@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { loginUser } from '../services/authApi';
+import { loginUser, completeLoginWith2FA } from '../services/authApi';
 import '../styles/auth.css';
 
 const Login = () => {
@@ -13,6 +13,11 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
+
+  // Set once a login response comes back with twoFactorRequired: true.
+  // While this is non-null, the form below renders the OTP step instead.
+  const [pendingLoginToken, setPendingLoginToken] = useState(null);
+  const [code, setCode] = useState('');
 
   const { login }  = useAuth();
   const navigate   = useNavigate();
@@ -25,12 +30,47 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // POST /api/users/login → { _id, name, email, token }
+      // POST /api/users/login → { _id, name, email, token } OR { twoFactorRequired, loginToken }
       const data = await loginUser(email, password);
+      if (data.twoFactorRequired) {
+        setPendingLoginToken(data.loginToken);
+        return;
+      }
       login(data, data.token);
       navigate(from, { replace: true });
     } catch (err) {
       setError(err.message ?? 'Incorrect email or password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const data = await completeLoginWith2FA(pendingLoginToken, code);
+      login(data, data.token);
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(err.message ?? 'Could not verify that code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const data = await loginUser(email, password);
+      if (data.twoFactorRequired) {
+        setPendingLoginToken(data.loginToken);
+      }
+    } catch (err) {
+      setError(err.message ?? 'Could not resend the code. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -55,40 +95,74 @@ const Login = () => {
           <span>{error}</span>
         </div>
 
-        <form onSubmit={handleSubmit} className="auth-form" noValidate>
-          <div className="form-group">
-            <label htmlFor="email">Email address</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-              disabled={loading}
-            />
-          </div>
+        {!pendingLoginToken ? (
+          <form onSubmit={handleSubmit} className="auth-form" noValidate>
+            <div className="form-group">
+              <label htmlFor="email">Email address</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                disabled={loading}
+              />
+            </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-              disabled={loading}
-            />
-          </div>
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+                disabled={loading}
+              />
+            </div>
 
-          <button type="submit" className="auth-button" disabled={loading}>
-            {loading && <span className="btn-spinner" aria-hidden="true" />}
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+            <button type="submit" className="auth-button" disabled={loading}>
+              {loading && <span className="btn-spinner" aria-hidden="true" />}
+              {loading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyCode} className="auth-form" noValidate>
+            <div className="form-group">
+              <label htmlFor="otp-code">Verification code</label>
+              <input
+                id="otp-code"
+                type="text"
+                inputMode="numeric"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="6-digit code"
+                autoFocus
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <button type="submit" className="auth-button" disabled={loading || !code}>
+              {loading && <span className="btn-spinner" aria-hidden="true" />}
+              {loading ? 'Verifying…' : 'Verify & sign in'}
+            </button>
+
+            <button
+              type="button"
+              className="auth-button"
+              style={{ background: 'transparent', color: 'var(--color-text-muted)', marginTop: 0 }}
+              onClick={handleResend}
+              disabled={loading}
+            >
+              Resend code
+            </button>
+          </form>
+        )}
 
         <p className="auth-footer">
           Don't have an account?&nbsp;<Link to="/signup">Create one</Link>

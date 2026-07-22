@@ -3,6 +3,7 @@ const dotenv = require('dotenv')
 const connectDB = require('./config/db')
 const fs = require('fs')
 const cors = require('cors');
+const { errorHandler } = require('./middleware/errorMiddleware')
 
 
 dotenv.config()
@@ -29,6 +30,8 @@ app.use('/api/files', fileRoutes)
 
 const folderRoutes = require('./routes/folderRoutes')
 app.use('/api/folders', folderRoutes)
+
+app.use(errorHandler)
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`))

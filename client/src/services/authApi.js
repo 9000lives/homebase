@@ -51,16 +51,39 @@ export const signupUser = (name, email, password) =>
 
 // ── GET /api/users/me ─────────────────────────────────────────
 // Sends:   Authorization: Bearer <token>
-// Returns: { id, displayName, email, role }
+// Returns: { id, displayName, email, role, twoFactorEnabled }
 export const verifyToken = () =>
   apiFetch('/me', {
     method:  'GET',
     headers: buildHeaders(true),
   });
 
-// ── No logout endpoint — just wipe the local session ─────────
-export const logoutUser = () => {
-  clearSession();
+// ── POST /api/users/login/2fa ─────────────────────────────────
+// Sends:   { loginToken, code }
+// Returns: { _id, name, email, token }
+export const completeLoginWith2FA = (loginToken, code) =>
+  apiFetch('/login/2fa', {
+    method:  'POST',
+    headers: buildHeaders(),
+    body:    JSON.stringify({ loginToken, code }),
+  });
+
+// ── POST /api/users/logout ────────────────────────────────────
+// Revokes the 2FA "remember this login" trust window server-side, so the
+// next login always re-challenges. Always clears the local session
+// afterward, even if this call fails — a user should never be stuck
+// unable to log out locally just because the network request failed.
+export const logoutUser = async () => {
+  try {
+    await apiFetch('/logout', {
+      method:  'POST',
+      headers: buildHeaders(true),
+    });
+  } catch {
+    // ignore — we still want to clear the local session below
+  } finally {
+    clearSession();
+  }
 };
 
 // ── PATCH /api/users/:id/status (admin only) ─────────────────
@@ -71,6 +94,66 @@ export const updateUserStatus = (userId, status) =>
     method:  'PATCH',
     headers: buildHeaders(true),
     body:    JSON.stringify({ status }),
+  });
+
+// ── PATCH /api/users/me/username ──────────────────────────────
+// Sends:   { password, displayName }
+// Returns: { id, displayName, email, role }
+export const changeUsername = (password, displayName) =>
+  apiFetch('/me/username', {
+    method:  'PATCH',
+    headers: buildHeaders(true),
+    body:    JSON.stringify({ password, displayName }),
+  });
+
+// ── PATCH /api/users/me/password (2FA disabled) ───────────────
+// Sends:   { currentPassword, newPassword, confirmNewPassword }
+export const changePassword = (currentPassword, newPassword, confirmNewPassword) =>
+  apiFetch('/me/password', {
+    method:  'PATCH',
+    headers: buildHeaders(true),
+    body:    JSON.stringify({ currentPassword, newPassword, confirmNewPassword }),
+  });
+
+// ── POST /api/users/me/password/2fa-challenge (2FA enabled, step 1) ──
+export const requestPasswordChangeCode = () =>
+  apiFetch('/me/password/2fa-challenge', {
+    method:  'POST',
+    headers: buildHeaders(true),
+  });
+
+// ── PATCH /api/users/me/password/2fa-confirm (2FA enabled, step 2) ───
+// Sends: { code, newPassword, confirmNewPassword }
+export const confirmPasswordChangeWithCode = (code, newPassword, confirmNewPassword) =>
+  apiFetch('/me/password/2fa-confirm', {
+    method:  'PATCH',
+    headers: buildHeaders(true),
+    body:    JSON.stringify({ code, newPassword, confirmNewPassword }),
+  });
+
+// ── POST /api/users/me/2fa/enable (step 1) ────────────────────
+export const requestEnable2FA = () =>
+  apiFetch('/me/2fa/enable', {
+    method:  'POST',
+    headers: buildHeaders(true),
+  });
+
+// ── POST /api/users/me/2fa/verify (step 2) ────────────────────
+// Sends: { code } — Returns: { twoFactorEnabled: true }
+export const confirmEnable2FA = (code) =>
+  apiFetch('/me/2fa/verify', {
+    method:  'POST',
+    headers: buildHeaders(true),
+    body:    JSON.stringify({ code }),
+  });
+
+// ── POST /api/users/me/2fa/disable ────────────────────────────
+// Sends: { password } — Returns: { twoFactorEnabled: false }
+export const disable2FA = (password) =>
+  apiFetch('/me/2fa/disable', {
+    method:  'POST',
+    headers: buildHeaders(true),
+    body:    JSON.stringify({ password }),
   });
 
 // ── Session helpers ───────────────────────────────────────────
