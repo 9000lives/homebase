@@ -10,7 +10,7 @@ import {
   confirmPasswordChangeWithCode,
 } from '../../services/authApi';
 
-const NoTwoFactorForm = () => {
+const NoTwoFactorForm = ({ onSuccess }) => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -33,6 +33,7 @@ const NoTwoFactorForm = () => {
       setNewPassword('');
       setConfirmNewPassword('');
       setStatus({ type: 'success', text: 'Password updated.' });
+      onSuccess?.();
     } catch (err) {
       setStatus({ type: 'error', text: err.message ?? 'Could not update password. Please try again.' });
     } finally {
@@ -89,7 +90,7 @@ const NoTwoFactorForm = () => {
   );
 };
 
-const TwoFactorPasswordForm = () => {
+const TwoFactorPasswordForm = ({ onSuccess }) => {
   const [step, setStep] = useState('idle'); // 'idle' | 'awaiting-code'
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -125,6 +126,7 @@ const TwoFactorPasswordForm = () => {
       setNewPassword('');
       setConfirmNewPassword('');
       setStatus({ type: 'success', text: 'Password updated.' });
+      onSuccess?.();
     } catch (err) {
       setStatus({ type: 'error', text: err.message ?? 'Could not update password. Please try again.' });
     } finally {
@@ -208,9 +210,13 @@ const TwoFactorPasswordForm = () => {
   );
 };
 
-const ChangePasswordForm = () => {
+const ChangePasswordForm = ({ onSuccess }) => {
   const { user } = useAuth();
-  return user?.twoFactorEnabled ? <TwoFactorPasswordForm /> : <NoTwoFactorForm />;
+  return user?.twoFactorEnabled ? (
+    <TwoFactorPasswordForm onSuccess={onSuccess} />
+  ) : (
+    <NoTwoFactorForm onSuccess={onSuccess} />
+  );
 };
 
 export default ChangePasswordForm;

@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { changeUsername } from '../../services/authApi';
 
-const ChangeUsernameForm = () => {
+const ChangeUsernameForm = ({ onSuccess }) => {
   const { user, refreshUser } = useAuth();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [password, setPassword] = useState('');
@@ -26,6 +26,7 @@ const ChangeUsernameForm = () => {
       await refreshUser();
       setPassword('');
       setStatus({ type: 'success', text: 'Username updated.' });
+      onSuccess?.();
     } catch (err) {
       setStatus({ type: 'error', text: err.message ?? 'Could not update username. Please try again.' });
     } finally {

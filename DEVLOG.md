@@ -69,7 +69,7 @@ deleting the mongoDB object.
 fileRoutes simply adds endpoints to each of the controller's functions, and ties the upload middleware to the controller, and protects all of
 it with our authMiddleware. 
 
-We also had to add a little if statement in our server.js file to make sure that our uploads folder actually exsists.
+    We also had to add a little if statement in our server.js file to make sure that our uploads folder actually exsists.
 
 In terms of bugs today it wasn't too bad, I had an issue where I created the fileModel with the parameters parentFolderID, capital I and D, but
 in the fileController was sending parentFolderId, capital I lowercase d.
