@@ -100,3 +100,7 @@ Used Claude Code for the first time today, I didn't realize how powerful of a to
 not only did it catch a couple errors I had made, but then after it added the features I requested, went back a verified they all worked by opening it on my 
 browser and manipulating it automatically. Crazy stuff! I had only really ever used AI to find errors in my code previously so using it to create whole features is a 
 brand new world to me. With the help of Claude we added rename/delete to files, previews and dowloads, and fixed a navigation bug. I hope to start work on the setting menu next!
+
+# 7/23/2026
+
+Implemented file sharing today. Added a new field called shared with that simply lists all the people any file/folder is shared with. When a file is shared with a user it shows up in a seperate section below their personally owned files. The user cannot delete or rename the files only view/download them. Same thing with folder, except the user can also see all children of the folder. The owner is warned of this before sharing the folder. I had to re-fortify some of the old paths such as delete/rename and the new path share with ownership checks beyond just accsess checks. 

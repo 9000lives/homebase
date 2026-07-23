@@ -6,7 +6,10 @@ const { uploadFile,
         viewFile,
         deleteFile,
         updateFileName,
-        updateFileFolder } = require('../controllers/fileController')
+        updateFileFolder,
+        getSharedFiles,
+        shareFile,
+        unshareFile } = require('../controllers/fileController')
 const { protect } = require('../middleware/authMiddleware')
 const upload = require('../middleware/uploadMiddleware')
 
@@ -20,6 +23,10 @@ router.post('/upload', protect, upload.single('file'), uploadFile)
 // Private - only fetches files that the user owns
 // Fetches all files inside the folder specifed, that are owned by the user
 router.get('/', protect, getFiles)
+
+// GET /api/files/shared
+// Private — fetches files that other users have shared with the logged in user
+router.get('/shared', protect, getSharedFiles)
 
 // GET /api/files/:id/download
 // Private — protect runs first and verifies the JWT from the Authorization header.
@@ -45,5 +52,15 @@ router.patch('/:id/rename', protect, updateFileName)
 // Private — protect runs first and verifies the JWT from the Authorization header.
 // Checks if file exsits, verifies the user owns file, then updates the parent folder of the file in the database
 router.patch('/:id/move', protect, updateFileFolder)
+
+// PATCH /api/files/:id/share
+// Private — protect runs first and verifies the JWT from the Authorization header.
+// Checks if file exists, verifies the user owns it, then adds userId (from the body) to sharedWith
+router.patch('/:id/share', protect, shareFile)
+
+// PATCH /api/files/:id/unshare
+// Private — protect runs first and verifies the JWT from the Authorization header.
+// Checks if file exists, verifies the user owns it, then removes userId (from the body) from sharedWith
+router.patch('/:id/unshare', protect, unshareFile)
 
 module.exports = router

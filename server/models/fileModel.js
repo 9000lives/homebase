@@ -24,6 +24,10 @@ const fileSchema = mongoose.Schema({
         type: Schema.Types.ObjectId,
         ref: 'Folder'
     },
+    sharedWith: {
+        type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+        default: []
+    },
     createdAt: {
         type: Date,
         default: Date.now

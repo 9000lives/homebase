@@ -8,8 +8,9 @@ import React from 'react';
  * @param {Function} onNewItem  - called when "+ New" is clicked
  * @param {Function} onSettings - called when the settings icon is clicked
  * @param {Function} onLogout   - called when the logout icon is clicked
+ * @param {boolean}  [showNewButton] - hides "+ New" while browsing a shared folder (read-only)
  */
-const Header = ({ onNewItem, onSettings, onLogout }) => {
+const Header = ({ onNewItem, onSettings, onLogout, showNewButton = true }) => {
   return (
     <header className="dashboard-header">
       <div className="dashboard-header__logo">
@@ -17,9 +18,11 @@ const Header = ({ onNewItem, onSettings, onLogout }) => {
       </div>
 
       <div className="dashboard-header__center">
-        <button type="button" className="new-item-button" onClick={onNewItem}>
-          <span className="new-item-button__plus">+</span> New
-        </button>
+        {showNewButton && (
+          <button type="button" className="new-item-button" onClick={onNewItem}>
+            <span className="new-item-button__plus">+</span> New
+          </button>
+        )}
       </div>
 
       <div className="dashboard-header__actions">

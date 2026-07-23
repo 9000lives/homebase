@@ -87,3 +87,29 @@ export const CloseIcon = () => (
     />
   </svg>
 );
+
+export const ShareIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+    <circle cx="18" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="6" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="18" cy="19" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M8.2 10.8L15.8 6.4M8.2 13.2l7.6 4.4"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+export const CheckIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+    <path
+      d="M5 12.5l4.5 4.5L19 7.5"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);

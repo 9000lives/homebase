@@ -2,6 +2,10 @@ const asyncHandler = require('express-async-handler')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const User = require('../models/userModel')
+// used read-only in searchUsers to check whether a candidate is already
+// in a given file's or folder's sharedWith list
+const File = require('../models/fileModel')
+const Folder = require('../models/folderModel')
 const req = require('express/lib/request')
 const { sendMail } = require('../config/mailer')
 const { generateOtp, hashOtp, verifyOtp, OTP_TTL_MINUTES } = require('../utils/otp')
@@ -199,6 +203,53 @@ const getMe = asyncHandler(async (req, res) => {
         role,
         twoFactorEnabled
     })
+})
+
+// @desc    Search active users by email or displayName, for sharing files.
+//          Optionally accepts a fileId so results can indicate which
+//          candidates the file is already shared with.
+// @route   GET /api/users/search?q=<term>&fileId=<optional>
+// @access  Private (requires a valid JWT — enforced by the `protect` middleware)
+const searchUsers = asyncHandler(async (req, res) => {
+    const { q, fileId, folderId } = req.query
+
+    if (!q || !q.trim()) {
+        return res.json([])
+    }
+
+    // escape regex metacharacters so search terms like "a.b" or "(" don't break the query
+    const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(escaped, 'i')
+
+    const users = await User.find({
+        _id: { $ne: req.user.id },
+        status: 'active',
+        $or: [{ email: pattern }, { displayName: pattern }]
+    })
+        .select('_id displayName email')
+        .limit(15)
+
+    let sharedIds = new Set()
+    if (fileId) {
+        const file = await File.findById(fileId).select('sharedWith ownerId')
+        // only trust the sharedWith list if the requester actually owns this file
+        if (file && file.ownerId.toString() === req.user.id) {
+            sharedIds = new Set((file.sharedWith || []).map((id) => id.toString()))
+        }
+    } else if (folderId) {
+        const folder = await Folder.findById(folderId).select('sharedWith ownerId')
+        // only trust the sharedWith list if the requester actually owns this folder
+        if (folder && folder.ownerId.toString() === req.user.id) {
+            sharedIds = new Set((folder.sharedWith || []).map((id) => id.toString()))
+        }
+    }
+
+    res.json(users.map((u) => ({
+        id: u._id,
+        displayName: u.displayName,
+        email: u.email,
+        isShared: sharedIds.has(u._id.toString())
+    })))
 })
 
 // @desc    Change the current user's display name (their "username").
@@ -417,6 +468,7 @@ module.exports = {
     loginWith2FA,
     logout,
     getMe,
+    searchUsers,
     updateUserStatus,
     changeUsername,
     changePassword,

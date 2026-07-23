@@ -13,6 +13,8 @@ import {
   renameFolder,
   deleteFile,
   deleteFolder,
+  fetchSharedFiles,
+  fetchSharedFolders,
 } from '../services/filesApi';
 import Header from '../components/Header';
 import FileTile from '../components/FileTile';
@@ -20,6 +22,7 @@ import NewItemModal from '../components/NewItemModal';
 import RenameModal from '../components/RenameModal';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import PreviewModal from '../components/PreviewModal';
+import ShareModal from '../components/ShareModal';
 import '../styles/dashboard.css';
 
 /**
@@ -42,10 +45,18 @@ const Dashboard = () => {
   const [currentFolderId, setCurrentFolderId] = useState(null);
   // Breadcrumb trail: [{ id, name }, ...]  — empty array = at root
   const [breadcrumbs, setBreadcrumbs] = useState([]);
+  // 'own' = browsing the logged-in user's own tree; 'shared' = browsing inside
+  // a folder someone else shared with them (read-only), entered via the
+  // "Shared files" section and reset to 'own' only by the Home breadcrumb.
+  const [mode, setMode] = useState('own');
 
   const [items,   setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
+
+  // Files other users have shared with the logged-in user — shown in their
+  // own "Shared files" section, separate from the current folder's contents.
+  const [sharedItems, setSharedItems] = useState([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [creating,  setCreating]  = useState(false);
@@ -53,6 +64,7 @@ const Dashboard = () => {
   const [renameTarget, setRenameTarget]   = useState(null);   // item being renamed, or null
   const [deleteTarget, setDeleteTarget]   = useState(null);   // item pending delete confirm, or null
   const [previewTarget, setPreviewTarget] = useState(null);   // file being previewed, or null
+  const [shareTarget, setShareTarget]     = useState(null);   // item being shared, or null
   const [actionLoading, setActionLoading] = useState(false);
 
   // ── Load contents of the current folder ───────────────────
@@ -79,6 +91,33 @@ const Dashboard = () => {
     loadItems(currentFolderId);
   }, [currentFolderId, ownerId, loadItems]);
 
+  // ── Load files/folders shared with the logged in user ──────
+  // Not folder-scoped (this is the flat "Shared files" section, not the
+  // current folder's contents), so this only depends on ownerId, not
+  // currentFolderId. Shared folders render as real folder tiles here — their
+  // own contents are only fetched once you navigate into one (see `mode`).
+  const loadSharedItems = useCallback(async () => {
+    if (!ownerId) return;
+    try {
+      const [sharedFolders, sharedFiles] = await Promise.all([
+        fetchSharedFolders(),
+        fetchSharedFiles(),
+      ]);
+      const combined = [
+        ...sharedFolders.map((f) => ({ ...f, type: 'folder', readOnly: true })),
+        ...sharedFiles.map((f) => ({ ...f, type: 'file', readOnly: true })),
+      ];
+      setSharedItems(sortItems(combined));
+    } catch (err) {
+      // Secondary section — don't clobber the main error banner over this.
+      console.error('Could not load shared items', err);
+    }
+  }, [ownerId]);
+
+  useEffect(() => {
+    loadSharedItems();
+  }, [ownerId, loadSharedItems]);
+
   // ── Navigation ──────────────────────────────────────────
 
   const handleTileClick = (item) => {
@@ -90,11 +129,25 @@ const Dashboard = () => {
     setCurrentFolderId(item._id);
   };
 
+  // Entry point for the "Shared files" section only — drilling deeper once
+  // inside a shared folder reuses handleTileClick unchanged, since it never
+  // touches `mode`, so `mode` correctly stays 'shared' through any depth.
+  const handleSharedTileClick = (item) => {
+    if (item.type === 'folder') {
+      setMode('shared');
+      setBreadcrumbs((prev) => [...prev, { id: item._id, name: item.name }]);
+      setCurrentFolderId(item._id);
+    } else {
+      setPreviewTarget(item);
+    }
+  };
+
   const handleBreadcrumbClick = (index) => {
-    // index === -1 means "Home" (root)
+    // index === -1 means "Home" (root) — always exits back to the user's own tree
     if (index === -1) {
       setBreadcrumbs([]);
       setCurrentFolderId(null);
+      setMode('own');
       return;
     }
     const target = breadcrumbs[index];
@@ -197,6 +250,7 @@ const Dashboard = () => {
         onNewItem={() => setModalOpen(true)}
         onSettings={handleSettings}
         onLogout={handleLogout}
+        showNewButton={mode === 'own'}
       />
 
       <main className="dashboard-main">
@@ -244,7 +298,9 @@ const Dashboard = () => {
         ) : items.length === 0 ? (
           <div className="dashboard-empty">
             <p>This folder is empty.</p>
-            <p className="dashboard-empty__sub">Use "+ New" above to add a file or folder.</p>
+            {mode === 'own' && (
+              <p className="dashboard-empty__sub">Use "+ New" above to add a file or folder.</p>
+            )}
           </div>
         ) : (
           <div className="file-grid">
@@ -255,9 +311,27 @@ const Dashboard = () => {
                 onClick={handleTileClick}
                 onRename={setRenameTarget}
                 onDelete={setDeleteTarget}
+                onShare={setShareTarget}
+                readOnly={mode === 'shared'}
               />
             ))}
           </div>
+        )}
+
+        {mode === 'own' && sharedItems.length > 0 && (
+          <>
+            <div className="section-divider"><span>Shared files</span></div>
+            <div className="file-grid">
+              {sharedItems.map((item) => (
+                <FileTile
+                  key={item._id}
+                  item={item}
+                  onClick={handleSharedTileClick}
+                  readOnly
+                />
+              ))}
+            </div>
+          </>
         )}
 
       </main>
@@ -290,7 +364,20 @@ const Dashboard = () => {
       )}
 
       {previewTarget && (
-        <PreviewModal item={previewTarget} onClose={() => setPreviewTarget(null)} />
+        <PreviewModal
+          item={previewTarget}
+          onClose={() => setPreviewTarget(null)}
+          readOnly={mode === 'shared' || !!previewTarget.readOnly}
+          onShareChange={loadSharedItems}
+        />
+      )}
+
+      {shareTarget && (
+        <ShareModal
+          item={shareTarget}
+          onClose={() => setShareTarget(null)}
+          onShareChange={loadSharedItems}
+        />
       )}
     </div>
   );

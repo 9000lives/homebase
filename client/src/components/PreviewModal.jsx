@@ -6,7 +6,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { fetchFilePreview, fetchFileForDownload } from '../services/filesApi';
-import { CloseIcon } from './Icons';
+import { CloseIcon, ShareIcon } from './Icons';
+import ShareModal from './ShareModal';
 
 const PREVIEWABLE_KINDS = {
   'image/jpeg':      'image',
@@ -17,15 +18,20 @@ const PREVIEWABLE_KINDS = {
 };
 
 /**
- * @param {object}   item    - { _id, name, mimeType }
- * @param {Function} onClose - called to dismiss the modal
+ * @param {object}   item           - { _id, name, mimeType }
+ * @param {Function} onClose        - called to dismiss the modal
+ * @param {boolean}  [readOnly]     - true when previewing a file shared *with* the current
+ *                                    user (they don't own it, so no Share button is shown)
+ * @param {Function} [onShareChange] - called after a share/unshare succeeds, so the caller
+ *                                     can refresh e.g. a "Shared files" list
  */
-const PreviewModal = ({ item, onClose }) => {
+const PreviewModal = ({ item, onClose, readOnly = false, onShareChange }) => {
   const [objectUrl, setObjectUrl]     = useState(null);
   const [textContent, setTextContent] = useState(null);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [shareOpen, setShareOpen]     = useState(false);
 
   const kind = PREVIEWABLE_KINDS[item.mimeType] ?? null;
 
@@ -79,6 +85,7 @@ const PreviewModal = ({ item, onClose }) => {
   };
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="preview-card" onClick={(e) => e.stopPropagation()}>
         <div className="preview-card__header">
@@ -114,9 +121,11 @@ const PreviewModal = ({ item, onClose }) => {
         </div>
 
         <div className="modal-actions">
-          <button type="button" className="modal-button modal-button--ghost" onClick={onClose}>
-            Close
-          </button>
+          {!readOnly && (
+            <button type="button" className="modal-button modal-button--ghost" onClick={() => setShareOpen(true)}>
+              <ShareIcon /> Share
+            </button>
+          )}
           <button
             type="button"
             className="modal-button modal-button--primary"
@@ -128,6 +137,11 @@ const PreviewModal = ({ item, onClose }) => {
         </div>
       </div>
     </div>
+
+    {shareOpen && (
+      <ShareModal item={item} onClose={() => setShareOpen(false)} onShareChange={onShareChange} />
+    )}
+    </>
   );
 };
 

@@ -162,6 +162,49 @@ export const deleteFile = (id) =>
     headers: buildJsonHeaders(),
   });
 
+// ── SHARING ──────────────────────────────────────────────────
+export const shareFile = (fileId, userId) =>
+  apiFetch(`${FILES_API_URL}/${fileId}/share`, {
+    method:  'PATCH',
+    headers: buildJsonHeaders(),
+    body:    JSON.stringify({ userId }),
+  });
+
+export const unshareFile = (fileId, userId) =>
+  apiFetch(`${FILES_API_URL}/${fileId}/unshare`, {
+    method:  'PATCH',
+    headers: buildJsonHeaders(),
+    body:    JSON.stringify({ userId }),
+  });
+
+// GET /api/files/shared — files other users have shared with the logged in user
+export const fetchSharedFiles = () =>
+  apiFetch(`${FILES_API_URL}/shared`, {
+    method:  'GET',
+    headers: buildJsonHeaders(),
+  });
+
+export const shareFolder = (folderId, userId) =>
+  apiFetch(`${FOLDERS_API_URL}/${folderId}/share`, {
+    method:  'PATCH',
+    headers: buildJsonHeaders(),
+    body:    JSON.stringify({ userId }),
+  });
+
+export const unshareFolder = (folderId, userId) =>
+  apiFetch(`${FOLDERS_API_URL}/${folderId}/unshare`, {
+    method:  'PATCH',
+    headers: buildJsonHeaders(),
+    body:    JSON.stringify({ userId }),
+  });
+
+// GET /api/folders/shared — folders other users have shared with the logged in user
+export const fetchSharedFolders = () =>
+  apiFetch(`${FOLDERS_API_URL}/shared`, {
+    method:  'GET',
+    headers: buildJsonHeaders(),
+  });
+
 // ── PREVIEW / DOWNLOAD ──────────────────────────────────────
 // Auth is header-based, so a plain <img>/<iframe>/<a> src can't include
 // the token — fetch the file as a Blob instead and hand the caller an

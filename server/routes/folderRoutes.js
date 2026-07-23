@@ -1,10 +1,13 @@
 const express = require('express')
 const router = express.Router()
-const { createFolder, 
-        getFolders, 
-        deleteFolder,  
-        updateFolderName, 
-        updateFolderParent } = require('../controllers/folderController')
+const { createFolder,
+        getFolders,
+        deleteFolder,
+        updateFolderName,
+        updateFolderParent,
+        getSharedFolders,
+        shareFolder,
+        unshareFolder } = require('../controllers/folderController')
 const { protect } = require('../middleware/authMiddleware')
 
 // POST /api/folders/create
@@ -16,6 +19,10 @@ router.post('/create', protect, createFolder)
 // Private - only fetches folders that the user owns
 // Fetches all folders inside the folder specifed, that are owned by the user
 router.get('/', protect, getFolders)
+
+// GET /api/folders/shared
+// Private — fetches folders that other users have shared directly with the logged in user
+router.get('/shared', protect, getSharedFolders)
 
 // DELETE /api/folders/:id/delete
 // Private - only the owner of the folder can delete it
@@ -31,5 +38,15 @@ router.patch('/:id/rename', protect, updateFolderName)
 // Private - only the owner of the folder can move it
 // Updates just the parentFolderId of the specified folder
 router.patch('/:id/move', protect, updateFolderParent)
+
+// PATCH /api/folders/:id/share
+// Private - only the owner of the folder can share it
+// Adds userId (from the body) to sharedWith, granting live read access to this folder's subtree
+router.patch('/:id/share', protect, shareFolder)
+
+// PATCH /api/folders/:id/unshare
+// Private - only the owner of the folder can unshare it
+// Removes userId (from the body) from sharedWith
+router.patch('/:id/unshare', protect, unshareFolder)
 
 module.exports = router

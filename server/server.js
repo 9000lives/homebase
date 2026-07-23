@@ -15,9 +15,10 @@ if(!fs.existsSync('uploads')) {
 
 const app = express()
 
+// configed to allow any localhost port dynamically, switch before prod
 app.use(cors({
-  origin: 'http://localhost:5173',
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: /^http:\/\/localhost:\d+$/,
+  credentials: true
 }));
 
 app.use(express.json()) // lets Express parse JSON request bodies

@@ -7,6 +7,7 @@ const {
     loginWith2FA, //POST completes a 2FA-challenged login
     logout,       //POST revokes the 2FA trust window server-side
     getMe,         //GET returns the profile of the currently logged-in user
+    searchUsers,   //GET searches active users by email/displayName for sharing
     updateUserStatus, //PATCH updates user status and returns updated user object
     changeUsername,             //PATCH renames the current user (password-gated)
     changePassword,              //PATCH changes password when 2FA is off
@@ -44,6 +45,11 @@ router.post('/logout', protect, logout)
 // If valid, req.user is set and getMe returns that user's profile data.
 // If invalid or missing, protect rejects with a 401 before getMe ever runs.
 router.get('/me', protect, getMe)
+
+// GET /api/users/search?q=<term>&fileId=<optional>
+// Private — used by the file-sharing search modal to find active users by
+// email or displayName. Excludes the requesting user themself.
+router.get('/search', protect, searchUsers)
 
 // PATCH /api/users/:id/status
 // Private - adminProtect runs first, verifies JWT and user role

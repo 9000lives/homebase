@@ -3,7 +3,9 @@ const fs = require('fs')
 const path = require('path')
 const Folder = require('../models/folderModel')
 const File = require('../models/fileModel')
+const User = require('../models/userModel')
 const mongoose = require('mongoose')
+const { isFolderAccessibleToUser } = require('../utils/folderAccess')
 
 // @desc    Create a folder
 // @route   POST /api/folders
@@ -13,6 +15,16 @@ const createFolder = asyncHandler(async (req, res) => {
 
     if(!name) {
         throw new Error('Please fill all fields')
+    }
+
+    // a shared folder's id is now discoverable by non-owners, so make sure the
+    // requester actually owns the parent before letting them create inside it
+    if (parentFolderId) {
+        const parent = await Folder.findById(parentFolderId)
+        if (!parent || parent.ownerId.toString() !== req.user.id) {
+            res.status(403)
+            throw new Error('Not authorized to create a folder here')
+        }
     }
 
     const folder = await Folder.create({
@@ -35,15 +47,116 @@ const createFolder = asyncHandler(async (req, res) => {
     }
 })
 
-// @desc    Get all folders for the logged in user
+// @desc    Get all folders inside the given parentFolderId — either the
+//          requester's own (root or own subfolder), or a foreign folder the
+//          requester has live shared access to
 // @route   GET /api/folders
 // @access  Private (requires valid JWT)
 const getFolders = asyncHandler(async (req, res) => {
-    const folders = await Folder.find({ 
-        ownerId: req.user.id,
-        parentFolderId: req.query.parentFolderId || null
-    })
+    const parentFolderId = req.query.parentFolderId || null
+
+    if (!parentFolderId) {
+        // root — always the requester's own root
+        const folders = await Folder.find({ ownerId: req.user.id, parentFolderId: null })
+        return res.json(folders)
+    }
+
+    const parent = await Folder.findById(parentFolderId)
+    if (!parent) {
+        res.status(404)
+        throw new Error('Folder not found')
+    }
+
+    if (parent.ownerId.toString() === req.user.id) {
+        // own subfolder — unchanged existing behavior
+        const folders = await Folder.find({ ownerId: req.user.id, parentFolderId })
+        return res.json(folders)
+    }
+
+    // foreign folder — only accessible via a live share chain
+    const accessible = await isFolderAccessibleToUser(parentFolderId, req.user.id)
+    if (!accessible) {
+        res.status(403)
+        throw new Error('Not authorized to view this folder')
+    }
+    const folders = await Folder.find({ parentFolderId })
     res.json(folders)
+})
+
+// @desc    Get all folders shared directly with the logged in user
+// @route   GET /api/folders/shared
+// @access  Private (requires valid JWT)
+const getSharedFolders = asyncHandler(async (req, res) => {
+    const folders = await Folder.find({ sharedWith: req.user.id })
+        .populate('ownerId', 'displayName email')
+    res.json(folders)
+})
+
+// @desc    Share a folder (and everything inside it, live) with another active user (owner only)
+// @route   PATCH /api/folders/:id/share
+// @access  Private (requires valid JWT)
+const shareFolder = asyncHandler(async (req, res) => {
+    const { userId } = req.body
+
+    const folder = await Folder.findById(req.params.id)
+
+    if (!folder) {
+        res.status(404)
+        throw new Error('Folder not found')
+    }
+
+    if (folder.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to share this folder')
+    }
+
+    if (!userId) {
+        res.status(400)
+        throw new Error('userId is required')
+    }
+
+    const targetUser = await User.findById(userId)
+    if (!targetUser || targetUser.status !== 'active') {
+        res.status(400)
+        throw new Error('User not found or not active')
+    }
+
+    const alreadyShared = folder.sharedWith.some((id) => id.toString() === userId)
+    if (!alreadyShared) {
+        folder.sharedWith.push(userId)
+        await folder.save()
+    }
+
+    res.status(200).json({ _id: folder._id, sharedWith: folder.sharedWith })
+})
+
+// @desc    Remove another user's access to a folder (owner only)
+// @route   PATCH /api/folders/:id/unshare
+// @access  Private (requires valid JWT)
+const unshareFolder = asyncHandler(async (req, res) => {
+    const { userId } = req.body
+
+    const folder = await Folder.findById(req.params.id)
+
+    if (!folder) {
+        res.status(404)
+        throw new Error('Folder not found')
+    }
+
+    if (folder.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to unshare this folder')
+    }
+
+    if (!userId) {
+        res.status(400)
+        throw new Error('userId is required')
+    }
+
+    folder.sharedWith = folder.sharedWith.filter((id) => id.toString() !== userId)
+    await folder.save()
+
+    res.status(200).json({ _id: folder._id, sharedWith: folder.sharedWith })
 })
 
 // @desc    Delete a folder and all its contents
@@ -148,4 +261,13 @@ const updateFolderParent = asyncHandler(async (req, res) => {
     })
 })
 
-module.exports = { createFolder, getFolders, deleteFolder, updateFolderName, updateFolderParent }
+module.exports = {
+    createFolder,
+    getFolders,
+    deleteFolder,
+    updateFolderName,
+    updateFolderParent,
+    getSharedFolders,
+    shareFolder,
+    unshareFolder
+}
