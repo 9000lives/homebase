@@ -3,7 +3,8 @@
 // ============================================================
 
 import React, { useState, useRef, useEffect } from 'react';
-import { FolderIcon, FileIcon, KebabIcon, PencilIcon, TrashIcon, ShareIcon } from './Icons';
+import { FolderIcon, FileIcon, KebabIcon, PencilIcon, TrashIcon, ShareIcon, DownloadIcon } from './Icons';
+import { getFileKind } from '../utils/fileType';
 
 /**
  * @param {object} item - { _id, name, type: 'folder' | 'file' }
@@ -11,11 +12,14 @@ import { FolderIcon, FileIcon, KebabIcon, PencilIcon, TrashIcon, ShareIcon } fro
  * @param {Function} onRename - called with `item` when "Rename" is chosen
  * @param {Function} onDelete - called with `item` when "Delete" is chosen
  * @param {Function} [onShare] - called with `item` when "Share" is chosen (folders only)
+ * @param {Function} [onDownload] - called with `item` when "Download" is chosen (folders only)
+ * @param {boolean} [downloading] - true while this folder's zip is being generated
  * @param {boolean} [readOnly] - when true, hides the kebab menu (rename/delete/share) entirely —
  *                                used for items shared with the current user, which they don't own
  */
-const FileTile = ({ item, onClick, onRename, onDelete, onShare, readOnly = false }) => {
+const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, downloading = false, readOnly = false }) => {
   const isFolder = item.type === 'folder';
+  const kind = isFolder ? null : getFileKind(item.mimeType);
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef(null);
 
@@ -30,6 +34,16 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, readOnly = false
     return () => document.removeEventListener('mousedown', closeOnOutsideClick);
   }, [menuOpen]);
 
+  // Auto-close the menu once a download finishes, since the Download item stays
+  // open (showing "Zipping…") instead of closing immediately like the other actions.
+  const wasDownloading = useRef(downloading);
+  useEffect(() => {
+    if (wasDownloading.current && !downloading) {
+      setMenuOpen(false);
+    }
+    wasDownloading.current = downloading;
+  }, [downloading]);
+
   return (
     <div className="file-tile-wrap" ref={wrapRef}>
       <button
@@ -39,7 +53,7 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, readOnly = false
         title={item.name}
       >
         <span className="file-tile__icon">
-          {isFolder ? <FolderIcon /> : <FileIcon />}
+          {isFolder ? <FolderIcon /> : <FileIcon kind={kind} />}
         </span>
         <span className="file-tile__name">{item.name}</span>
       </button>
@@ -80,6 +94,18 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, readOnly = false
                   }}
                 >
                   <ShareIcon /> Share
+                </button>
+              )}
+              {item.type === 'folder' && (
+                <button
+                  type="button"
+                  disabled={downloading}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownload(item);
+                  }}
+                >
+                  <DownloadIcon /> {downloading ? 'Zipping…' : 'Download'}
                 </button>
               )}
               <button

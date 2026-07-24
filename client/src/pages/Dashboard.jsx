@@ -15,6 +15,7 @@ import {
   deleteFolder,
   fetchSharedFiles,
   fetchSharedFolders,
+  fetchFolderForDownload,
 } from '../services/filesApi';
 import Header from '../components/Header';
 import FileTile from '../components/FileTile';
@@ -66,6 +67,7 @@ const Dashboard = () => {
   const [previewTarget, setPreviewTarget] = useState(null);   // file being previewed, or null
   const [shareTarget, setShareTarget]     = useState(null);   // item being shared, or null
   const [actionLoading, setActionLoading] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);   // id of the folder currently being zipped, or null
 
   // ── Load contents of the current folder ───────────────────
   const loadItems = useCallback(async (parentFolderId) => {
@@ -231,6 +233,23 @@ const Dashboard = () => {
     }
   };
 
+  const handleDownloadFolder = async (item) => {
+    setDownloadingId(item._id);
+    try {
+      const blob = await fetchFolderForDownload(item._id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${item.name}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message ?? 'Could not download folder.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   // ── Header actions ──────────────────────────────────────
 
   const handleSettings = () => {
@@ -312,6 +331,8 @@ const Dashboard = () => {
                 onRename={setRenameTarget}
                 onDelete={setDeleteTarget}
                 onShare={setShareTarget}
+                onDownload={handleDownloadFolder}
+                downloading={downloadingId === item._id}
                 readOnly={mode === 'shared'}
               />
             ))}

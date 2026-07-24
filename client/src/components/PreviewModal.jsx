@@ -8,14 +8,9 @@ import React, { useState, useEffect } from 'react';
 import { fetchFilePreview, fetchFileForDownload } from '../services/filesApi';
 import { CloseIcon, ShareIcon } from './Icons';
 import ShareModal from './ShareModal';
+import { getFileKind } from '../utils/fileType';
 
-const PREVIEWABLE_KINDS = {
-  'image/jpeg':      'image',
-  'image/png':       'image',
-  'image/gif':       'image',
-  'application/pdf': 'pdf',
-  'text/plain':      'text',
-};
+const PREVIEWABLE = new Set(['image', 'pdf', 'text', 'audio']);
 
 /**
  * @param {object}   item           - { _id, name, mimeType }
@@ -33,7 +28,8 @@ const PreviewModal = ({ item, onClose, readOnly = false, onShareChange }) => {
   const [downloading, setDownloading] = useState(false);
   const [shareOpen, setShareOpen]     = useState(false);
 
-  const kind = PREVIEWABLE_KINDS[item.mimeType] ?? null;
+  const fileKind = getFileKind(item.mimeType);
+  const kind = PREVIEWABLE.has(fileKind) ? fileKind : null;
 
   useEffect(() => {
     let currentUrl = null;
@@ -114,6 +110,9 @@ const PreviewModal = ({ item, onClose, readOnly = false, onShareChange }) => {
           )}
           {!loading && !error && kind === 'text' && (
             <pre className="preview-card__text">{textContent}</pre>
+          )}
+          {!loading && !error && kind === 'audio' && (
+            <audio src={objectUrl} controls className="preview-card__audio" />
           )}
           {!loading && !error && !kind && (
             <p className="preview-card__fallback">No preview available for this file type.</p>

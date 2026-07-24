@@ -3,6 +3,7 @@ const router = express.Router()
 const { createFolder,
         getFolders,
         deleteFolder,
+        downloadFolder,
         updateFolderName,
         updateFolderParent,
         getSharedFolders,
@@ -28,6 +29,10 @@ router.get('/shared', protect, getSharedFolders)
 // Private - only the owner of the folder can delete it
 // Deletes the specified folder and all its contents (subfolders and files)
 router.delete('/:id/delete', protect, deleteFolder)
+
+// GET /api/folders/:id/download
+// Private - only the owner can download; streams a zip of the folder and all its contents
+router.get('/:id/download', protect, downloadFolder)
 
 // PATCH /api/folders/:id/rename
 // Private - only the owner of the folder can rename it

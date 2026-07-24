@@ -28,7 +28,8 @@ const fileFilter = (req, file, cb) => {
         'application/pdf',
         'text/plain',
         'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'audio/mpeg'
     ]
 
     if (allowedTypes.includes(file.mimetype)) {

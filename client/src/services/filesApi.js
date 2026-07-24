@@ -226,3 +226,6 @@ export const fetchFilePreview = (id) => fetchBlob(`${FILES_API_URL}/${id}/view`)
 
 // GET /api/files/:id/download — same bytes, but the server sends Content-Disposition: attachment
 export const fetchFileForDownload = (id) => fetchBlob(`${FILES_API_URL}/${id}/download`);
+
+// GET /api/folders/:id/download — a zip of the folder and all its nested contents
+export const fetchFolderForDownload = (id) => fetchBlob(`${FOLDERS_API_URL}/${id}/download`);

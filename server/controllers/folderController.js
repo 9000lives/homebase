@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler')
 const fs = require('fs')
 const path = require('path')
+const { ZipArchive } = require('archiver')
 const Folder = require('../models/folderModel')
 const File = require('../models/fileModel')
 const User = require('../models/userModel')
@@ -201,6 +202,51 @@ async function deleteFolderFromDB(folderId) {
     await Folder.findByIdAndDelete(folderId)
 }
 
+// @desc    Download a folder and all its contents as a zip
+// @route   GET /api/folders/:id/download
+// @access  Private (requires valid JWT, owner only)
+const downloadFolder = asyncHandler(async (req, res) => {
+    const folder = await Folder.findById(req.params.id)
+
+    if (!folder) {
+        res.status(404)
+        throw new Error('Folder not found')
+    }
+
+    if (folder.ownerId.toString() !== req.user.id) {
+        res.status(403)
+        throw new Error('Not authorized to download this folder')
+    }
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${folder.name}.zip"`)
+
+    const archive = new ZipArchive({ zlib: { level: 9 } })
+    archive.on('error', (err) => { throw err })
+    archive.pipe(res)
+
+    await addFolderToArchive(archive, folder._id, folder.name)
+    await archive.finalize()
+})
+
+// Helper function to recursively add a folder's files and subfolders into a zip archive,
+// preserving the folder structure under `prefix`. Mirrors deleteFolderFromDB's traversal.
+async function addFolderToArchive(archive, folderId, prefix) {
+    const files = await File.find({ parentFolderId: folderId })
+    for (const file of files) {
+        archive.file(path.resolve(file.storagePath), { name: `${prefix}/${file.name}` })
+    }
+
+    const subfolders = await Folder.find({ parentFolderId: folderId })
+    for (const subfolder of subfolders) {
+        await addFolderToArchive(archive, subfolder._id, `${prefix}/${subfolder.name}`)
+    }
+
+    if (files.length === 0 && subfolders.length === 0) {
+        archive.append(null, { name: `${prefix}/` }) // preserve empty folders in the zip
+    }
+}
+
 // @desc    Update a folder name
 // @route   PATCH /api/folders/:id/rename
 // @access  Private (requires valid JWT 'protect` middlware)
@@ -265,6 +311,7 @@ module.exports = {
     createFolder,
     getFolders,
     deleteFolder,
+    downloadFolder,
     updateFolderName,
     updateFolderParent,
     getSharedFolders,

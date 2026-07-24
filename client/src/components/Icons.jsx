@@ -1,8 +1,6 @@
 // ============================================================
 //  src/components/Icons.jsx
 //  Inline SVG icons for the file explorer.
-//  Add more file-type icons here later (e.g. ImageIcon, PdfIcon)
-//  and branch on item.name's extension in FileTile.jsx.
 // ============================================================
 
 import React from 'react';
@@ -20,29 +18,45 @@ export const FolderIcon = () => (
   </svg>
 );
 
-export const FileIcon = () => (
-  <svg viewBox="0 0 48 48" width="40" height="40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M11 5.5C11 4.119 12.119 3 13.5 3H27L37 13V42.5C37 43.881 35.881 45 34.5 45H13.5C12.119 45 11 43.881 11 42.5V5.5Z"
-      fill="#f3f4f6"
-      stroke="#9ca3af"
-      strokeWidth="1.5"
-    />
-    <path d="M27 3L37 13H29C27.895 13 27 12.105 27 11V3Z" fill="#d1d5db" />
-    <text
-      x="24"
-      y="32"
-      textAnchor="middle"
-      fontFamily="Inter, sans-serif"
-      fontSize="9"
-      fontWeight="700"
-      fill="#6b7280"
-      letterSpacing="0.5"
-    >
-      TXT
-    </text>
-  </svg>
-);
+// Style (fill/accent/label) per file "kind" — see src/utils/fileType.js
+// for the mimeType -> kind mapping.
+const FILE_TYPE_STYLES = {
+  image:   { fill: '#dcfce7', accent: '#22c55e', label: 'IMG' },
+  pdf:     { fill: '#fee2e2', accent: '#ef4444', label: 'PDF' },
+  doc:     { fill: '#dbeafe', accent: '#3b82f6', label: 'DOC' },
+  audio:   { fill: '#f3e8ff', accent: '#a855f7', label: 'MP3' },
+  text:    { fill: '#f3f4f6', accent: '#6b7280', label: 'TXT' },
+  generic: { fill: '#f3f4f6', accent: '#9ca3af', label: '' },
+};
+
+export const FileIcon = ({ kind = 'generic' }) => {
+  const { fill, accent, label } = FILE_TYPE_STYLES[kind] ?? FILE_TYPE_STYLES.generic;
+  return (
+    <svg viewBox="0 0 48 48" width="40" height="40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M11 5.5C11 4.119 12.119 3 13.5 3H27L37 13V42.5C37 43.881 35.881 45 34.5 45H13.5C12.119 45 11 43.881 11 42.5V5.5Z"
+        fill={fill}
+        stroke={accent}
+        strokeWidth="1.5"
+      />
+      <path d="M27 3L37 13H29C27.895 13 27 12.105 27 11V3Z" fill={accent} fillOpacity="0.35" />
+      {label && (
+        <text
+          x="24"
+          y="32"
+          textAnchor="middle"
+          fontFamily="Inter, sans-serif"
+          fontSize="9"
+          fontWeight="700"
+          fill={accent}
+          letterSpacing="0.5"
+        >
+          {label}
+        </text>
+      )}
+    </svg>
+  );
+};
 
 export const KebabIcon = () => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
@@ -98,6 +112,18 @@ export const ShareIcon = () => (
       stroke="currentColor"
       strokeWidth="1.6"
       strokeLinecap="round"
+    />
+  </svg>
+);
+
+export const DownloadIcon = () => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+    <path
+      d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
