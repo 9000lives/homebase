@@ -5,6 +5,7 @@ const File = require('../models/fileModel')
 const User = require('../models/userModel')
 const Folder = require('../models/folderModel')
 const { isFolderAccessibleToUser } = require('../utils/folderAccess')
+const { buildFolderPathMap } = require('../utils/folderPath')
 
 // @desc    Upload a file
 // @route   POST /api/files/upload
@@ -135,6 +136,31 @@ const getSharedFiles = asyncHandler(async (req, res) => {
     const files = await File.find({ sharedWith: req.user.id })
         .populate('ownerId', 'displayName email')
     res.json(files)
+})
+
+// @desc    Search the logged in user's OWN files by name, across their whole tree
+// @route   GET /api/files/search?q=<term>
+// @access  Private (requires valid JWT)
+const searchFiles = asyncHandler(async (req, res) => {
+    const q = req.query.q
+    if (!q || !q.trim()) return res.json([])
+
+    // escape regex metacharacters so a search for "a.b" doesn't match "axb"
+    const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(escaped, 'i')   // case-insensitive substring match
+
+    // ownerId-scoped only (no parentFolderId) = every folder the user owns.
+    // Shared-with-me files are intentionally excluded — they live in the shared section.
+    const files = await File.find({ ownerId: req.user.id, name: pattern }).limit(50)
+
+    // attach the ancestor trail of each file's folder so the UI can show where it lives
+    const pathMap = await buildFolderPathMap(req.user.id)
+    const results = files.map((file) => ({
+        ...file.toObject(),
+        path: file.parentFolderId ? (pathMap.get(file.parentFolderId.toString()) || []) : []
+    }))
+
+    res.json(results)
 })
 
 // @desc    Share a file with another active user (owner only)
@@ -298,6 +324,7 @@ module.exports = {
     updateFileName,
     updateFileFolder,
     getSharedFiles,
+    searchFiles,
     shareFile,
     unshareFile
 }

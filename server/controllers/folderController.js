@@ -7,6 +7,7 @@ const File = require('../models/fileModel')
 const User = require('../models/userModel')
 const mongoose = require('mongoose')
 const { isFolderAccessibleToUser } = require('../utils/folderAccess')
+const { buildFolderPathMap } = require('../utils/folderPath')
 
 // @desc    Create a folder
 // @route   POST /api/folders
@@ -91,6 +92,31 @@ const getSharedFolders = asyncHandler(async (req, res) => {
     const folders = await Folder.find({ sharedWith: req.user.id })
         .populate('ownerId', 'displayName email')
     res.json(folders)
+})
+
+// @desc    Search the logged in user's OWN folders by name, across their whole tree
+// @route   GET /api/folders/search?q=<term>
+// @access  Private (requires valid JWT)
+const searchFolders = asyncHandler(async (req, res) => {
+    const q = req.query.q
+    if (!q || !q.trim()) return res.json([])
+
+    // escape regex metacharacters so a search for "a.b" doesn't match "axb"
+    const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(escaped, 'i')   // case-insensitive substring match
+
+    // ownerId-scoped only (no parentFolderId) = every folder the user owns.
+    const folders = await Folder.find({ ownerId: req.user.id, name: pattern }).limit(50)
+
+    // path = the folder's ancestors, EXCLUDING itself (i.e. its parent's trail),
+    // so the UI shows where the matched folder lives.
+    const pathMap = await buildFolderPathMap(req.user.id)
+    const results = folders.map((folder) => ({
+        ...folder.toObject(),
+        path: folder.parentFolderId ? (pathMap.get(folder.parentFolderId.toString()) || []) : []
+    }))
+
+    res.json(results)
 })
 
 // @desc    Share a folder (and everything inside it, live) with another active user (owner only)
@@ -315,6 +341,7 @@ module.exports = {
     updateFolderName,
     updateFolderParent,
     getSharedFolders,
+    searchFolders,
     shareFolder,
     unshareFolder
 }

@@ -7,6 +7,7 @@ const { createFolder,
         updateFolderName,
         updateFolderParent,
         getSharedFolders,
+        searchFolders,
         shareFolder,
         unshareFolder } = require('../controllers/folderController')
 const { protect } = require('../middleware/authMiddleware')
@@ -24,6 +25,10 @@ router.get('/', protect, getFolders)
 // GET /api/folders/shared
 // Private — fetches folders that other users have shared directly with the logged in user
 router.get('/shared', protect, getSharedFolders)
+
+// GET /api/folders/search?q=<term>
+// Private — searches the logged in user's own folders by name across their whole tree
+router.get('/search', protect, searchFolders)
 
 // DELETE /api/folders/:id/delete
 // Private - only the owner of the folder can delete it

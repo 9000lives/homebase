@@ -16,8 +16,10 @@ import {
   fetchSharedFiles,
   fetchSharedFolders,
   fetchFolderForDownload,
+  searchDirectory,
 } from '../services/filesApi';
 import Header from '../components/Header';
+import SearchBar from '../components/SearchBar';
 import FileTile from '../components/FileTile';
 import NewItemModal from '../components/NewItemModal';
 import RenameModal from '../components/RenameModal';
@@ -58,6 +60,16 @@ const Dashboard = () => {
   // Files other users have shared with the logged-in user — shown in their
   // own "Shared files" section, separate from the current folder's contents.
   const [sharedItems, setSharedItems] = useState([]);
+
+  // ── Search ──────────────────────────────────────────────
+  // `query` tracks the raw input; `debouncedQuery` lags 500ms behind (or jumps
+  // ahead instantly on Enter) and is what actually drives the search request.
+  // `searchResults` holds the personal-tree matches from the backend; the shared
+  // section is filtered client-side from the already-loaded `sharedItems`.
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [creating,  setCreating]  = useState(false);
@@ -120,6 +132,41 @@ const Dashboard = () => {
     loadSharedItems();
   }, [ownerId, loadSharedItems]);
 
+  // ── Search ──────────────────────────────────────────────
+  // Debounce the raw input: 500ms after the last keystroke, adopt it as the
+  // query that actually runs. Pressing Enter (see handleSearchSubmit) bypasses
+  // this wait by setting debouncedQuery directly.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 500);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Run the personal-tree search whenever the debounced query settles. The
+  // `cancelled` flag drops out-of-order responses when typing quickly.
+  useEffect(() => {
+    const term = debouncedQuery.trim();
+    if (!term) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    searchDirectory(term)
+      .then((results) => { if (!cancelled) setSearchResults(sortItems(results)); })
+      .catch((err) => { if (!cancelled) console.error('Search failed', err); })
+      .finally(() => { if (!cancelled) setSearching(false); });
+    return () => { cancelled = true; };
+  }, [debouncedQuery]);
+
+  const handleSearchSubmit = () => setDebouncedQuery(query);   // Enter → search now
+
+  const clearSearch = () => {
+    setQuery('');
+    setDebouncedQuery('');
+    setSearchResults([]);
+  };
+
   // ── Navigation ──────────────────────────────────────────
 
   const handleTileClick = (item) => {
@@ -129,6 +176,23 @@ const Dashboard = () => {
     }
     setBreadcrumbs((prev) => [...prev, { id: item._id, name: item.name }]);
     setCurrentFolderId(item._id);
+  };
+
+  // Entry point for a personal search result — the match may live in a folder
+  // other than the one currently open, so we can't reuse handleTileClick (which
+  // would append to the current breadcrumb trail). Instead we rebuild the trail
+  // from the result's own ancestor `path`, then clear the search to reveal the
+  // folder. Files just open in the preview, wherever they live.
+  const handleSearchResultClick = (item) => {
+    if (item.type === 'folder') {
+      const trail = (item.path || []).map((p) => ({ id: p._id, name: p.name }));
+      setBreadcrumbs([...trail, { id: item._id, name: item.name }]);
+      setCurrentFolderId(item._id);
+      setMode('own');
+      clearSearch();
+    } else {
+      setPreviewTarget(item);
+    }
   };
 
   // Entry point for the "Shared files" section only — drilling deeper once
@@ -263,6 +327,16 @@ const Dashboard = () => {
 
   // ── Render ──────────────────────────────────────────────
 
+  // Search is a personal-tree feature, only active in 'own' mode with a term.
+  const isSearching = mode === 'own' && debouncedQuery.trim() !== '';
+  // Personal grid shows backend search matches while searching, else the folder.
+  const personalList = isSearching ? searchResults : items;
+  // Shared grid filters the already-loaded shared list client-side while searching.
+  const sharedList = isSearching
+    ? sharedItems.filter((it) =>
+        it.name.toLowerCase().includes(debouncedQuery.trim().toLowerCase()))
+    : sharedItems;
+
   return (
     <div className="dashboard">
       <Header
@@ -273,6 +347,16 @@ const Dashboard = () => {
       />
 
       <main className="dashboard-main">
+
+        {/* ── Search ── */}
+        {mode === 'own' && (
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            onClear={clearSearch}
+            onSubmit={handleSearchSubmit}
+          />
+        )}
 
         {/* ── Breadcrumb trail ── */}
         <nav className="breadcrumbs" aria-label="Folder path">
@@ -308,42 +392,42 @@ const Dashboard = () => {
         </div>
 
         {/* ── Content ── */}
-        {loading ? (
+        {(loading && !isSearching) || (isSearching && searching) ? (
           <div className="dashboard-loading">
             <span className="auth-loading__dot" />
             <span className="auth-loading__dot" />
             <span className="auth-loading__dot" />
           </div>
-        ) : items.length === 0 ? (
+        ) : personalList.length === 0 ? (
           <div className="dashboard-empty">
-            <p>This folder is empty.</p>
-            {mode === 'own' && (
+            <p>{isSearching ? 'No matching files or folders.' : 'This folder is empty.'}</p>
+            {!isSearching && mode === 'own' && (
               <p className="dashboard-empty__sub">Use "+ New" above to add a file or folder.</p>
             )}
           </div>
         ) : (
           <div className="file-grid">
-            {items.map((item) => (
+            {personalList.map((item) => (
               <FileTile
                 key={item._id}
                 item={item}
-                onClick={handleTileClick}
+                onClick={isSearching ? handleSearchResultClick : handleTileClick}
                 onRename={setRenameTarget}
                 onDelete={setDeleteTarget}
                 onShare={setShareTarget}
                 onDownload={handleDownloadFolder}
                 downloading={downloadingId === item._id}
-                readOnly={mode === 'shared'}
+                readOnly={mode === 'shared' || isSearching}
               />
             ))}
           </div>
         )}
 
-        {mode === 'own' && sharedItems.length > 0 && (
+        {mode === 'own' && sharedList.length > 0 && (
           <>
             <div className="section-divider"><span>Shared files</span></div>
             <div className="file-grid">
-              {sharedItems.map((item) => (
+              {sharedList.map((item) => (
                 <FileTile
                   key={item._id}
                   item={item}

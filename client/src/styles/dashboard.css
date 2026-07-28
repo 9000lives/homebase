@@ -95,6 +95,64 @@
   margin: 0 auto;
 }
 
+/* ── Search bar ── */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-input-bg);
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0 12px;
+  margin-bottom: 18px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-bar:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(0, 161, 219, 0.14);
+}
+
+.search-bar__icon {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.search-bar__input {
+  flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  padding: 11px 0;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.search-bar__input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.search-bar__clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 4px;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.search-bar__clear:hover {
+  color: var(--color-accent);
+  background: var(--color-surface);
+}
+
 /* ── Breadcrumbs ── */
 .breadcrumbs {
   display: flex;
@@ -217,6 +275,17 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--color-text);
+  text-align: center;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Folder path shown under search-result tiles (where the match lives) */
+.file-tile__path {
+  font-size: 11px;
+  color: var(--color-text-subtle);
   text-align: center;
   width: 100%;
   white-space: nowrap;

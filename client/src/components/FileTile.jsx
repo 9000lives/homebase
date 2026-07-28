@@ -56,6 +56,15 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, down
           {isFolder ? <FolderIcon /> : <FileIcon kind={kind} />}
         </span>
         <span className="file-tile__name">{item.name}</span>
+        {/* Search results always carry a `path` array (folder ancestors, empty at
+            root) so every result shows where it lives — "Home" for root items,
+            "Home / Folder / …" for nested ones. Normal browsing and shared tiles
+            have no `path` field, so no location line renders for them. */}
+        {Array.isArray(item.path) && (
+          <span className="file-tile__path" title={['Home', ...item.path.map((p) => p.name)].join(' / ')}>
+            {['Home', ...item.path.map((p) => p.name)].join(' / ')}
+          </span>
+        )}
       </button>
 
       {!readOnly && (

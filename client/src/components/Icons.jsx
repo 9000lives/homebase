@@ -128,6 +128,18 @@ export const DownloadIcon = () => (
   </svg>
 );
 
+export const SearchIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+    <path
+      d="M16.5 16.5L21 21"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 export const CheckIcon = () => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
     <path

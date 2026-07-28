@@ -94,6 +94,45 @@ export const fetchDirectoryContents = async (ownerId, parentFolderId = null) => 
   return [...taggedFolders, ...taggedFiles];
 };
 
+// ── SEARCH (whole tree, own items only) ─────────────────────
+/**
+ * GET /api/files/search?q=<term> — the user's own files matching the term
+ * anywhere in their tree. Each result carries a `path` array ([{ _id, name }, ...])
+ * of its folder's ancestors so the UI can show where the match lives.
+ */
+export const searchFiles = (query) =>
+  apiFetch(`${FILES_API_URL}/search?q=${encodeURIComponent(query)}`, {
+    method:  'GET',
+    headers: buildJsonHeaders(),
+  });
+
+/**
+ * GET /api/folders/search?q=<term> — the user's own folders matching the term.
+ * `path` here is the matched folder's ancestors, excluding itself.
+ */
+export const searchFolders = (query) =>
+  apiFetch(`${FOLDERS_API_URL}/search?q=${encodeURIComponent(query)}`, {
+    method:  'GET',
+    headers: buildJsonHeaders(),
+  });
+
+/**
+ * Runs both searches in parallel and tags each result with a `type`
+ * ('folder' | 'file'), mirroring fetchDirectoryContents. Results already
+ * carry `path` from the server.
+ */
+export const searchDirectory = async (query) => {
+  const [folders, files] = await Promise.all([
+    searchFolders(query),
+    searchFiles(query),
+  ]);
+
+  const taggedFolders = folders.map((f) => ({ ...f, type: 'folder' }));
+  const taggedFiles   = files.map((f) => ({ ...f, type: 'file' }));
+
+  return [...taggedFolders, ...taggedFiles];
+};
+
 // ── ✏️  CREATE A FOLDER ──────────────────────────────────────
 /**
  * POST /api/folders

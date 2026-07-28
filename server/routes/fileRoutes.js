@@ -8,6 +8,7 @@ const { uploadFile,
         updateFileName,
         updateFileFolder,
         getSharedFiles,
+        searchFiles,
         shareFile,
         unshareFile } = require('../controllers/fileController')
 const { protect } = require('../middleware/authMiddleware')
@@ -27,6 +28,10 @@ router.get('/', protect, getFiles)
 // GET /api/files/shared
 // Private — fetches files that other users have shared with the logged in user
 router.get('/shared', protect, getSharedFiles)
+
+// GET /api/files/search?q=<term>
+// Private — searches the logged in user's own files by name across their whole tree
+router.get('/search', protect, searchFiles)
 
 // GET /api/files/:id/download
 // Private — protect runs first and verifies the JWT from the Authorization header.
