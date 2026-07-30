@@ -45,6 +45,7 @@ const registerUser = asyncHandler(async (req, res) => {
             _id: user.id,
             name: user.displayName,
             email: user.email,
+            role: user.role,
             token: generateToken(user._id)
         })
     }
@@ -98,6 +99,9 @@ const loginUser = asyncHandler(async (req, res) => {
             _id: user.id,
             name: user.displayName,
             email: user.email,
+            // AuthContext stores this from the login response; without it an admin
+            // who just logged in has no role until /me re-hydrates on refresh
+            role: user.role,
             token: generateToken(user._id),
             twoFactorEnabled: user.twoFactorEnabled
         })
@@ -151,7 +155,11 @@ const loginWith2FA = asyncHandler(async (req, res) => {
         _id: user.id,
         name: user.displayName,
         email: user.email,
-        token: generateToken(user._id)
+        role: user.role,
+        token: generateToken(user._id),
+        // was missing entirely, so AuthContext's !!rawUser.twoFactorEnabled
+        // resolved to false and Settings claimed 2FA was off after a 2FA login
+        twoFactorEnabled: user.twoFactorEnabled
     })
 })
 
@@ -167,26 +175,9 @@ const logout = asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Logged out' })
 })
 
-// @desc    Update a user status
-// @route   PATCH /api/admin/users/:id/status
-// @access  Private (requires valid JWT, and admin role - enforced by the `adminProtect` middlware)
-const updateUserStatus = asyncHandler(async (req, res) => {
-
-    const { status } = req.body
-
-    const user = await User.findById(req.params.id)
-
-    //update just the role then call save() so that our mongoose validation runs
-    user.status = status
-    const updatedUser = await user.save()
-
-    res.status(200).json({
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        status: updatedUser.status
-    })
-})
+// NOTE: updateUserStatus moved to controllers/adminController.js — it now lives
+// behind PATCH /api/admin/users/:id/status, which is the route its own doc
+// comment always claimed. One path means one place to keep the guards.
 
 // @desc    Return the currently authenticated user's profile
 // @route   GET /api/users/me
@@ -469,7 +460,6 @@ module.exports = {
     logout,
     getMe,
     searchUsers,
-    updateUserStatus,
     changeUsername,
     changePassword,
     requestPasswordChangeCode,

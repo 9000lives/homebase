@@ -20,6 +20,32 @@
   --color-success: #16a34a;
   --color-input-bg: #fafafa;
   --color-overlay: rgba(17, 24, 39, 0.45);
+
+  /* Categorical chart slots for the admin storage donut. The ORDER is the
+     colourblind-safety mechanism — validated against --color-surface (#ffffff)
+     for lightness band, chroma, CVD separation and normal-vision separation.
+     Bound to categories by class in admin.css, never by array index.
+     Deliberately not --color-accent: that means "interactive" everywhere else,
+     so a slice wearing it would read as a button.
+     NOTE: slots 3/4/5 sit below 3:1 on white, so the donut's legend must always
+     print each category's bytes + percent as text. That legend is the required
+     relief channel, not a nicety — don't reduce it to a hover-only tooltip. */
+  --chart-1: #2a78d6;  /* blue    → Images    */
+  --chart-2: #eb6834;  /* orange  → PDFs      */
+  --chart-3: #1baf7a;  /* aqua    → Documents */
+  --chart-4: #eda100;  /* yellow  → Audio     */
+  --chart-5: #e87ba4;  /* magenta → Text      */
+  --chart-6: #008300;  /* green   → Other     */
+
+  /* Account-status badges. The project had no amber token, so pending derives
+     one. All three clear 4.5:1 ink-on-background (text threshold).
+     Reserved for account status — never reuse as a 7th chart colour. */
+  --status-active-ink: #006300;
+  --status-active-bg: #eef7ee;
+  --status-pending-ink: #8a5a00;
+  --status-pending-bg: #fdf6e7;
+  --status-suspended-ink: #a02525;
+  --status-suspended-bg: #fcf0f0;
 }
 
 :root[data-theme='dark'] {
@@ -39,4 +65,20 @@
   --color-success: #4ade80;
   --color-input-bg: #14171c;
   --color-overlay: rgba(0, 0, 0, 0.65);
+
+  /* Same six hues re-stepped for the dark surface (#1a1d23) — a selected set,
+     not an automatic flip of the light values. All six clear 3:1 here. */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+
+  --status-active-ink: #4ade80;
+  --status-active-bg: #18261d;
+  --status-pending-ink: #fab219;
+  --status-pending-bg: #2a2418;
+  --status-suspended-ink: #f87171;
+  --status-suspended-bg: #2a1c1f;
 }

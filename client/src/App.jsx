@@ -12,7 +12,9 @@ import Login     from './pages/Login';
 import Signup    from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Settings  from './pages/Settings';
+import Admin     from './pages/Admin';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute     from './components/AdminRoute';
 
 // ── PublicRoute ───────────────────────────────────────────────
 // If the user IS already logged in, redirect them away from
@@ -52,6 +54,16 @@ function App() {
                 <ProtectedRoute>
                   <Settings />
                 </ProtectedRoute>
+              }
+            />
+
+            {/* ── Admin-only route (redirects non-admins to /dashboard) ── */}
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
               }
             />
 

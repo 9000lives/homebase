@@ -8,7 +8,6 @@ const {
     logout,       //POST revokes the 2FA trust window server-side
     getMe,         //GET returns the profile of the currently logged-in user
     searchUsers,   //GET searches active users by email/displayName for sharing
-    updateUserStatus, //PATCH updates user status and returns updated user object
     changeUsername,             //PATCH renames the current user (password-gated)
     changePassword,              //PATCH changes password when 2FA is off
     requestPasswordChangeCode,  //POST sends a 2FA password-change code
@@ -18,7 +17,7 @@ const {
     disable2FA                  //POST turns 2FA off (password-gated)
 } = require('../controllers/userController')
 
-const { protect, adminProtect } = require('../middleware/authMiddleware')
+const { protect } = require('../middleware/authMiddleware')
 const { loginLimiter, otpRequestLimiter, otpVerifyLimiter } = require('../middleware/rateLimiters')
 
 // POST - /api/users/
@@ -51,11 +50,8 @@ router.get('/me', protect, getMe)
 // email or displayName. Excludes the requesting user themself.
 router.get('/search', protect, searchUsers)
 
-// PATCH /api/users/:id/status
-// Private - adminProtect runs first, verifies JWT and user role
-// If valid, req.user is set and updateUserRole updates the user's status
-// If invalid or missing, protect rejects with a 401 before updateUserStatus ever runs.
-router.patch('/:id/status', adminProtect, updateUserStatus)
+// NOTE: PATCH /:id/status moved to routes/adminRoutes.js as
+// PATCH /api/admin/users/:id/status — all admin endpoints live under /api/admin.
 
 // ── Self-service settings routes — all act on req.user.id, never req.params.id ──
 

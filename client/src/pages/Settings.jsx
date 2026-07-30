@@ -19,6 +19,10 @@ const Settings = () => {
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
 
+  // Gates both the sidebar link and the section below. The /admin route and
+  // every admin endpoint enforce this independently — this only hides the door.
+  const isAdmin = user?.role === 'admin';
+
   return (
     <div className="settings-page">
       <header className="settings-header">
@@ -34,6 +38,7 @@ const Settings = () => {
             <a href="#appearance" className="settings-sidebar__link">Appearance</a>
             <a href="#account" className="settings-sidebar__link">Account</a>
             <a href="#security" className="settings-sidebar__link">Security</a>
+            {isAdmin && <a href="#admin" className="settings-sidebar__link">Admin</a>}
           </nav>
 
           <div className="settings-content">
@@ -93,6 +98,25 @@ const Settings = () => {
               <h3 className="settings-section__subtitle">Two-factor authentication</h3>
               <TwoFactorSection />
             </section>
+
+            {isAdmin && (
+              <section id="admin" className="settings-section">
+                <h2 className="settings-section__title">Admin</h2>
+                <p className="modal-text">
+                  Review pending accounts, manage users, and see storage usage across
+                  all accounts.
+                </p>
+                <div className="settings-field-action">
+                  <button
+                    type="button"
+                    className="modal-button modal-button--primary"
+                    onClick={() => navigate('/admin')}
+                  >
+                    Open Admin Dashboard
+                  </button>
+                </div>
+              </section>
+            )}
           </div>
         </div>
       </main>

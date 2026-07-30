@@ -86,15 +86,10 @@ export const logoutUser = async () => {
   }
 };
 
-// ── PATCH /api/users/:id/status (admin only) ─────────────────
-// Sends:   { status: 'active' | 'deactivated' | 'pending' }
-// Returns: { _id, name, email, status }
-export const updateUserStatus = (userId, status) =>
-  apiFetch(`/${userId}/status`, {
-    method:  'PATCH',
-    headers: buildHeaders(true),
-    body:    JSON.stringify({ status }),
-  });
+// NOTE: the admin status-change call now lives in services/adminApi.js as
+// setUserStatus() — it hits PATCH /api/admin/users/:id/status. The old export
+// here was never called and documented a 'deactivated' status that isn't in
+// the schema enum (it's 'suspended').
 
 // ── PATCH /api/users/me/username ──────────────────────────────
 // Sends:   { password, displayName }

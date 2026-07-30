@@ -1,0 +1,363 @@
+/* ============================================================
+   admin.css — Homebase admin dashboard styles
+
+   Pairs with dashboard.css, which Admin.jsx also imports for the modal
+   system (.modal-overlay/.modal-card/.modal-button/.modal-text),
+   .icon-button, and the .share-user-tile* classes that UserTile reuses.
+   ============================================================ */
+
+/* ── Page shell (mirrors .settings-header / .settings-main) ── */
+
+.admin-page {
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: var(--color-surface);
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.admin-back {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-back:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-accent);
+}
+
+.admin-header__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.admin-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ── The reflowing grid ──
+   auto-fit IS the responsive mechanism — no breakpoint needed for the reflow.
+   min(320px, 100%) rather than a bare 320px: the bare form is a hard floor
+   and overflows the viewport below ~320px even at a single column. */
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 20px;
+  align-items: start; /* independent boxes — don't stretch to the tallest */
+}
+
+/* ── Box (matches .settings-section) ── */
+
+.admin-box {
+  background: var(--color-surface);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  min-width: 0;
+}
+
+.admin-box__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-box__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.admin-box__total {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+  /* proportional figures — this is a standalone headline, not a column */
+}
+
+/* Held at reduced opacity while refetching, rather than swapping in a
+   spinner — a skeleton flash on every mutation makes the box jump. */
+.admin-box__body--refreshing {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.admin-box__empty {
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+  padding: 20px 0;
+  text-align: center;
+}
+
+.admin-box__error {
+  font-size: 13.5px;
+  color: var(--color-danger);
+  padding: 12px 0;
+}
+
+.admin-box__hint {
+  font-size: 13px;
+  color: var(--color-text-subtle);
+  padding: 16px 0;
+  text-align: center;
+}
+
+/* ── Storage donut ── */
+
+.admin-donut {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 20px;
+}
+
+.admin-donut__svg {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  display: block;
+}
+
+.admin-donut__track {
+  stroke: var(--color-border);
+}
+
+/* pointer-events on the stroke only, so <title> tooltips fire over the
+   painted arc rather than the whole circle's bounding box */
+.admin-donut__arc {
+  pointer-events: stroke;
+}
+
+.admin-donut__hole {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.admin-donut__hole-label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+/* Colour binds to the category KEY, never to a slot index — that's what stops
+   a category dropping to 0 bytes from repainting its neighbours. */
+.admin-donut__arc--images    { stroke: var(--chart-1); }
+.admin-donut__arc--pdfs      { stroke: var(--chart-2); }
+.admin-donut__arc--documents { stroke: var(--chart-3); }
+.admin-donut__arc--audio     { stroke: var(--chart-4); }
+.admin-donut__arc--text      { stroke: var(--chart-5); }
+.admin-donut__arc--other     { stroke: var(--chart-6); }
+
+/* ── Legend ──
+   Also the table view: it prints every byte figure and percent as real text,
+   which is the required relief for the sub-3:1 light-mode slices. */
+
+.admin-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-legend__row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.admin-legend__swatch--images    { background: var(--chart-1); }
+.admin-legend__swatch--pdfs      { background: var(--chart-2); }
+.admin-legend__swatch--documents { background: var(--chart-3); }
+.admin-legend__swatch--audio     { background: var(--chart-4); }
+.admin-legend__swatch--text      { background: var(--chart-5); }
+.admin-legend__swatch--other     { background: var(--chart-6); }
+
+.admin-legend__label {
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* tabular-nums on these two — they ARE columns and must align vertically */
+.admin-legend__value {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-legend__percent {
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+  min-width: 46px;
+  text-align: right;
+}
+
+.admin-legend__row--empty .admin-legend__label,
+.admin-legend__row--empty .admin-legend__value {
+  color: var(--color-text-subtle);
+}
+
+.admin-legend__row--empty .admin-legend__swatch {
+  opacity: 0.4;
+}
+
+/* ── User lists ──
+   A private copy of .share-results (dashboard.css) so tuning the admin
+   boxes can never move the share modal. */
+
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* ── Status badge ──
+   Always rendered alongside the status WORD — hue is a supporting cue,
+   never the encoding. */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-badge--active {
+  color: var(--status-active-ink);
+  background: var(--status-active-bg);
+}
+
+.status-badge--pending {
+  color: var(--status-pending-ink);
+  background: var(--status-pending-bg);
+}
+
+.status-badge--suspended {
+  color: var(--status-suspended-ink);
+  background: var(--status-suspended-bg);
+}
+
+/* ── User detail modal ── */
+
+.admin-detail__email {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin: -10px 0 18px;
+  overflow-wrap: anywhere;
+}
+
+.admin-detail__row {
+  border-top: 1px solid var(--color-border);
+  padding: 14px 0;
+}
+
+.admin-detail__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.admin-detail__value {
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.admin-detail__sub {
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  margin-top: 4px;
+}
+
+.admin-detail__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+/* .modal-button is flex:1, which is right inside .modal-actions but makes a
+   lone button stretch oddly here — let these size to their content. */
+.admin-detail__actions .modal-button {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+}
+
+/* ── Status <select> — nothing else in the app styles a select yet ── */
+
+.admin-select {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.admin-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(0, 161, 219, 0.14);
+}
+
+/* Without color-scheme the native option popup renders white-on-white in
+   dark mode. Scoped so light-theme inputs are untouched. */
+:root[data-theme='dark'] .admin-select {
+  color-scheme: dark;
+}
+
+/* ── Responsive: the grid reflows on its own, so this only tightens padding ── */
+
+@media (max-width: 600px) {
+  .admin-header { padding: 12px 16px; }
+  .admin-main   { padding: 24px 16px 48px; }
+  .admin-box    { padding: 20px; }
+  .admin-grid   { gap: 16px; }
+}

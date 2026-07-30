@@ -40,6 +40,8 @@ export const AuthProvider = ({ children }) => {
       name:        rawUser.name,
       email:       rawUser.email,
       displayName: rawUser.name,   // /me uses displayName; mirror it here
+      role:        rawUser.role,   // needed by AdminRoute — without it a freshly
+                                   // logged-in admin has no role until /me re-runs
       twoFactorEnabled: !!rawUser.twoFactorEnabled,
     };
     persistSession(token, user);

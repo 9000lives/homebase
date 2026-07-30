@@ -32,6 +32,10 @@ app.use('/api/files', fileRoutes)
 const folderRoutes = require('./routes/folderRoutes')
 app.use('/api/folders', folderRoutes)
 
+// admin dashboard — every route inside is behind protect + requireAdmin
+const adminRoutes = require('./routes/adminRoutes')
+app.use('/api/admin', adminRoutes)
+
 app.use(errorHandler)
 
 const PORT = process.env.PORT || 3000
