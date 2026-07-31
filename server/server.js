@@ -132,6 +132,10 @@ app.use('/api/users', require('./routes/userRoutes'))
 app.use('/api/files', require('./routes/fileRoutes'))
 app.use('/api/folders', require('./routes/folderRoutes'))
 
+// Reading announcements is a member action, so it mounts as its own resource.
+// Creating and retracting them is an admin action and lives under /api/admin.
+app.use('/api/announcements', require('./routes/announcementRoutes'))
+
 // admin dashboard — every route inside is behind protect + requireAdmin
 app.use('/api/admin', require('./routes/adminRoutes'))
 

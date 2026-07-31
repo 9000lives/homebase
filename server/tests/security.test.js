@@ -556,6 +556,636 @@ test('M6: list endpoints are bounded regardless of what the client asks for', as
     assert.ok(r.headers.get('x-total-count') !== null)
 })
 
+// ── L9: password reset ────────────────────────────────────────────────────
+//
+// The audit called this "the highest-risk feature still to be written". These
+// assert the properties L9 required of it.
+//
+// Codes are seeded directly into the reset slot rather than read from an email:
+// the tests can't open an inbox, and the plaintext exists nowhere else by
+// design. /password/forgot is exercised only where the endpoint's own behaviour
+// is what's under test.
+const seedResetCode = async (userId, code, { expiresInMs = 10 * 60 * 1000 } = {}) => {
+    const { hashOtp } = require('../utils/otp')
+    await User.updateOne({ _id: userId }, {
+        passwordResetCodeHash: await hashOtp(code),
+        passwordResetExpires: new Date(Date.now() + expiresInMs),
+        passwordResetAttempts: 0
+    })
+}
+
+const readResetSlot = (userId) =>
+    User.findById(userId).select(
+        '+passwordResetCodeHash +passwordResetExpires +passwordResetAttempts ' +
+        '+twoFactorCodeHash +twoFactorCodeExpires'
+    )
+
+test('L9: /password/forgot answers identically for a real and an unknown address', async () => {
+    const known = await makeUser('forgot-known@homebase.test')
+
+    const hit = await api('POST', '/users/password/forgot', { body: { email: known.email } })
+    const miss = await api('POST', '/users/password/forgot', {
+        body: { email: 'nobody-here@homebase.test' }
+    })
+
+    // The single most important assertion in the feature. On a private
+    // whitelist platform the membership list is itself sensitive, so any
+    // difference here — status, body, or wording — is an enumeration oracle.
+    assert.equal(hit.status, 200)
+    assert.equal(miss.status, 200)
+    assert.deepEqual(hit.body, miss.body)
+
+    // And the real one actually armed a code, so the parity isn't achieved by
+    // the endpoint quietly doing nothing at all.
+    const doc = await readResetSlot(known.id)
+    assert.ok(doc.passwordResetCodeHash, 'a real address must get a code minted')
+})
+
+test('L9: pending and suspended accounts get the same response as an active one', async () => {
+    const pending = await api('POST', '/users/', {
+        body: { name: 'Pend', email: 'forgot-pending@homebase.test', password: PASSWORD }
+    })
+    assert.equal(pending.status, 201)   // left at status 'pending'
+
+    const suspended = await makeUser('forgot-suspended@homebase.test')
+    await User.updateOne({ _id: suspended.id }, { status: 'suspended' })
+
+    const active = await makeUser('forgot-active@homebase.test')
+
+    const responses = []
+    for (const email of [
+        'forgot-pending@homebase.test',
+        'forgot-suspended@homebase.test',
+        'forgot-active@homebase.test'
+    ]) {
+        responses.push(await api('POST', '/users/password/forgot', { body: { email } }))
+    }
+
+    for (const r of responses) {
+        assert.equal(r.status, 200)
+        assert.deepEqual(r.body, responses[0].body)
+    }
+})
+
+test('L9: a reset code sets the password, kills sessions, and returns no token', async () => {
+    const user = await makeUser('reset-happy@homebase.test')
+    const NEW_PASSWORD = 'entirely-different-phrase-42'
+
+    assert.equal((await api('GET', '/users/me', { token: user.token })).status, 200)
+
+    await seedResetCode(user.id, '123456')
+
+    const reset = await api('POST', '/users/password/reset', {
+        body: {
+            email: user.email,
+            code: '123456',
+            newPassword: NEW_PASSWORD,
+            confirmNewPassword: NEW_PASSWORD
+        }
+    })
+    assert.equal(reset.status, 200, JSON.stringify(reset.body))
+
+    // A public endpoint must not hand back a session — that would skip the 2FA
+    // challenge for an account that has it enabled.
+    assert.equal(reset.body.token, undefined, '/password/reset must not return a token')
+
+    // H8: every outstanding session dies with the old password.
+    assert.equal((await api('GET', '/users/me', { token: user.token })).status, 401)
+
+    assert.equal(
+        (await api('POST', '/users/login', { body: { email: user.email, password: PASSWORD } })).status,
+        400,
+        'the old password must stop working'
+    )
+    const relogin = await api('POST', '/users/login', {
+        body: { email: user.email, password: NEW_PASSWORD }
+    })
+    assert.equal(relogin.status, 200, 'the new password must work')
+
+    // Single-use: the code is cleared on redemption.
+    const doc = await readResetSlot(user.id)
+    assert.equal(doc.passwordResetCodeHash, null, 'a redeemed code must be cleared')
+})
+
+test('L9: a redeemed reset code cannot be replayed', async () => {
+    const user = await makeUser('reset-replay@homebase.test')
+    await seedResetCode(user.id, '222222')
+
+    const body = (pw) => ({
+        email: user.email, code: '222222', newPassword: pw, confirmNewPassword: pw
+    })
+
+    assert.equal((await api('POST', '/users/password/reset', { body: body('first-new-password-11') })).status, 200)
+    assert.equal((await api('POST', '/users/password/reset', { body: body('second-new-password-22') })).status, 400)
+})
+
+test('L9: a code issued for one account cannot reset another', async () => {
+    const owner = await makeUser('reset-owner@homebase.test')
+    const victim = await makeUser('reset-victim@homebase.test')
+
+    await seedResetCode(owner.id, '333333')
+
+    const r = await api('POST', '/users/password/reset', {
+        body: {
+            email: victim.email,
+            code: '333333',
+            newPassword: 'not-going-to-happen-99',
+            confirmNewPassword: 'not-going-to-happen-99'
+        }
+    })
+    assert.equal(r.status, 400)
+
+    // The victim's password is untouched.
+    assert.equal(
+        (await api('POST', '/users/login', { body: { email: victim.email, password: PASSWORD } })).status,
+        200
+    )
+})
+
+// ── The field-separation guarantee ────────────────────────────────────────
+//
+// Every OTP in this app used to share one slot on the User document. These two
+// tests are what prove reset codes and 2FA codes no longer do. If either fails,
+// a code minted for one purpose is redeemable for the other and the whole
+// design collapses.
+test('L9: a 2FA login code cannot be redeemed at /password/reset', async () => {
+    const { hashOtp } = require('../utils/otp')
+    const user = await makeUser('crossflow-a@homebase.test')
+
+    // Arm the 2FA slot only, exactly as a login challenge would.
+    await User.updateOne({ _id: user.id }, {
+        twoFactorCodeHash: await hashOtp('444444'),
+        twoFactorCodeExpires: new Date(Date.now() + 10 * 60 * 1000),
+        twoFactorCodeAttempts: 0
+    })
+
+    const r = await api('POST', '/users/password/reset', {
+        body: {
+            email: user.email,
+            code: '444444',
+            newPassword: 'should-not-work-at-all-77',
+            confirmNewPassword: 'should-not-work-at-all-77'
+        }
+    })
+    assert.equal(r.status, 400, 'a login code must not reset a password')
+
+    assert.equal(
+        (await api('POST', '/users/login', { body: { email: user.email, password: PASSWORD } })).status,
+        200,
+        'the password must be unchanged'
+    )
+})
+
+test('L9: requesting a reset does not clobber a pending 2FA login challenge', async () => {
+    const { hashOtp } = require('../utils/otp')
+    const user = await makeUser('crossflow-b@homebase.test')
+
+    await User.updateOne({ _id: user.id }, {
+        twoFactorCodeHash: await hashOtp('555555'),
+        twoFactorCodeExpires: new Date(Date.now() + 10 * 60 * 1000),
+        twoFactorCodeAttempts: 0
+    })
+    const before = await readResetSlot(user.id)
+
+    assert.equal(
+        (await api('POST', '/users/password/forgot', { body: { email: user.email } })).status,
+        200
+    )
+
+    const after = await readResetSlot(user.id)
+    assert.equal(
+        after.twoFactorCodeHash,
+        before.twoFactorCodeHash,
+        'a reset request must leave an in-flight 2FA challenge alone'
+    )
+    assert.ok(after.passwordResetCodeHash, 'and must arm the reset slot instead')
+})
+
+test('L9: a rejected password does not consume the code', async () => {
+    const user = await makeUser('reset-policy@homebase.test')
+    await seedResetCode(user.id, '666666')
+
+    // 'password' is on the common-password deny list, so this fails the policy
+    // check — which runs BEFORE the code is verified, precisely so a bad
+    // password doesn't cost the user a fresh email.
+    const weak = await api('POST', '/users/password/reset', {
+        body: {
+            email: user.email, code: '666666',
+            newPassword: 'password', confirmNewPassword: 'password'
+        }
+    })
+    assert.equal(weak.status, 400)
+
+    const good = await api('POST', '/users/password/reset', {
+        body: {
+            email: user.email, code: '666666',
+            newPassword: 'a-perfectly-fine-passphrase-1', confirmNewPassword: 'a-perfectly-fine-passphrase-1'
+        }
+    })
+    assert.equal(good.status, 200, 'the same code must still work after a policy rejection')
+})
+
+test('L9: an expired reset code is refused', async () => {
+    const user = await makeUser('reset-expired@homebase.test')
+    await seedResetCode(user.id, '777777', { expiresInMs: -1000 })
+
+    const r = await api('POST', '/users/password/reset', {
+        body: {
+            email: user.email, code: '777777',
+            newPassword: 'too-late-for-this-one-88', confirmNewPassword: 'too-late-for-this-one-88'
+        }
+    })
+    assert.equal(r.status, 400)
+    assert.match(r.body.message, /expired/i)
+})
+
+test('L9: wrong codes are capped, and the cap survives a later correct guess', async () => {
+    const user = await makeUser('reset-bruteforce@homebase.test')
+    await seedResetCode(user.id, '888888')
+
+    const attempt = (code) => api('POST', '/users/password/reset', {
+        body: {
+            email: user.email, code,
+            newPassword: 'brute-force-attempt-value-1', confirmNewPassword: 'brute-force-attempt-value-1'
+        }
+    })
+
+    // OTP_MAX_ATTEMPTS is 5.
+    for (let i = 0; i < 5; i += 1) {
+        assert.equal((await attempt('000000')).status, 400)
+    }
+
+    // The 6th is refused on the cap before the code is even compared — so the
+    // correct code no longer helps.
+    const withCorrect = await attempt('888888')
+    assert.equal(withCorrect.status, 400, 'the correct code must not work once the cap is hit')
+
+    assert.equal(
+        (await api('POST', '/users/login', { body: { email: user.email, password: PASSWORD } })).status,
+        200,
+        'the password must be unchanged'
+    )
+})
+
+test('L9: an unknown email at /password/reset gives the wrong-code error, not a 404', async () => {
+    const r = await api('POST', '/users/password/reset', {
+        body: {
+            email: 'ghost@homebase.test', code: '123456',
+            newPassword: 'does-not-matter-at-all-12', confirmNewPassword: 'does-not-matter-at-all-12'
+        }
+    })
+    // A 404 here would hand back the enumeration /password/forgot is careful
+    // not to give away.
+    assert.equal(r.status, 400)
+    assert.match(r.body.message, /verification code/i)
+})
+
+test('L9: an ordinary password change kills an outstanding reset code', async () => {
+    const user = await makeUser('reset-superseded@homebase.test')
+    await seedResetCode(user.id, '999999')
+
+    // Change the password the normal way (no 2FA on this account).
+    const changed = await api('PATCH', '/users/me/password', {
+        token: user.token,
+        body: {
+            currentPassword: PASSWORD,
+            newPassword: 'changed-it-myself-thanks-5',
+            confirmNewPassword: 'changed-it-myself-thanks-5'
+        }
+    })
+    assert.equal(changed.status, 200, JSON.stringify(changed.body))
+
+    // The code emailed a moment ago must be dead — otherwise it sits in the
+    // inbox as a live credential for the rest of its ten minutes.
+    const doc = await readResetSlot(user.id)
+    assert.equal(doc.passwordResetCodeHash, null, 'a password change must clear the reset slot')
+
+    const r = await api('POST', '/users/password/reset', {
+        body: {
+            email: user.email, code: '999999',
+            newPassword: 'should-be-rejected-now-33', confirmNewPassword: 'should-be-rejected-now-33'
+        }
+    })
+    assert.equal(r.status, 400)
+})
+
+test('L9: mismatched confirmation is refused before anything else happens', async () => {
+    const user = await makeUser('reset-mismatch@homebase.test')
+    await seedResetCode(user.id, '121212')
+
+    const r = await api('POST', '/users/password/reset', {
+        body: {
+            email: user.email, code: '121212',
+            newPassword: 'one-good-passphrase-11', confirmNewPassword: 'a-different-one-22'
+        }
+    })
+    assert.equal(r.status, 400)
+
+    const doc = await readResetSlot(user.id)
+    assert.ok(doc.passwordResetCodeHash, 'the code must survive a mismatch')
+    assert.equal(doc.passwordResetAttempts, 0, 'and must not count as an attempt')
+})
+
+// ── Admin surface: authorization matrix ───────────────────────────────────
+//
+// Every admin endpoint gets the same three-way assertion. The audit's two worst
+// findings were both authorization gaps, and a new route added to adminRoutes.js
+// is only guarded because of the router-level `protect, requireAdmin` — this is
+// what proves that guard is actually reaching each one.
+test('every admin endpoint rejects anonymous, pre-auth and non-admin callers', async () => {
+    const bobDoc = await User.findById(bob.id)
+    const preAuth = signPreAuthToken(bobDoc)
+
+    const endpoints = [
+        ['GET', '/admin/stats/storage'],
+        ['GET', '/admin/users?status=pending'],
+        ['GET', `/admin/users/${bob.id}`],
+        ['PATCH', `/admin/users/${bob.id}/status`],
+        ['POST', `/admin/users/${bob.id}/revoke-sessions`],
+        ['POST', `/admin/users/${bob.id}/reset-2fa`],
+        ['DELETE', `/admin/users/${bob.id}`],
+        ['GET', '/admin/announcements'],
+        ['POST', '/admin/announcements'],
+        ['DELETE', '/admin/announcements/000000000000000000000000'],
+        ['GET', '/admin/audit'],
+        ['GET', '/admin/audit/events'],
+        ['GET', '/admin/system/health'],
+        ['GET', '/admin/system/config'],
+        ['POST', '/admin/system/test-email']
+    ]
+
+    for (const [method, p] of endpoints) {
+        assert.equal((await api(method, p)).status, 401, `${method} ${p} must reject anonymous`)
+        assert.equal(
+            (await api(method, p, { token: preAuth })).status, 401,
+            `${method} ${p} must reject a pre-auth token`
+        )
+        assert.equal(
+            (await api(method, p, { token: bob.token })).status, 403,
+            `${method} ${p} must reject a non-admin`
+        )
+    }
+})
+
+test('admin read endpoints answer for an admin', async () => {
+    for (const p of [
+        '/admin/announcements',
+        '/admin/audit',
+        '/admin/audit/events',
+        '/admin/system/health',
+        '/admin/system/config'
+    ]) {
+        assert.equal((await api('GET', p, { token: alice.token })).status, 200, p)
+    }
+})
+
+test('the config endpoint never returns a secret', async () => {
+    const r = await api('GET', '/admin/system/config', { token: alice.token })
+    assert.equal(r.status, 200)
+
+    const serialized = JSON.stringify(r.body)
+    for (const secret of ['JWT_SECRET', 'MONGO_URI', 'SMTP_PASS', 'jwtSecret', 'mongoUri', 'smtpPass']) {
+        assert.ok(!serialized.includes(secret), `config leaked a key named ${secret}`)
+    }
+    // The real values, not just their names.
+    assert.ok(!serialized.includes(process.env.JWT_SECRET), 'config leaked the JWT secret value')
+    assert.ok(!serialized.includes(TEST_URI), 'config leaked the database URI')
+})
+
+// ── Announcements ─────────────────────────────────────────────────────────
+test('an announcement is delivered once, then not again', async () => {
+    const reader = await makeUser('reader@homebase.test')
+
+    const created = await api('POST', '/admin/announcements', {
+        token: alice.token,
+        body: {
+            title: 'Scheduled maintenance',
+            body: 'Homebase will be offline briefly on Saturday.',
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        }
+    })
+    assert.equal(created.status, 201, JSON.stringify(created.body))
+
+    const first = await api('GET', '/announcements', { token: reader.token })
+    assert.equal(first.status, 200)
+    assert.ok(
+        first.body.some((a) => a.title === 'Scheduled maintenance'),
+        'a live announcement must reach a user who has not seen it'
+    )
+
+    assert.equal((await api('PATCH', '/announcements/seen', { token: reader.token })).status, 200)
+
+    const second = await api('GET', '/announcements', { token: reader.token })
+    assert.equal(second.status, 200)
+    assert.deepEqual(second.body, [], 'nothing live should remain after the watermark advances')
+
+    // Idempotent — the client fires this without awaiting it.
+    assert.equal((await api('PATCH', '/announcements/seen', { token: reader.token })).status, 200)
+    assert.deepEqual((await api('GET', '/announcements', { token: reader.token })).body, [])
+})
+
+test('an expired announcement is never delivered, even to someone who never saw it', async () => {
+    const Announcement = require('../models/announcementModel')
+
+    const created = await api('POST', '/admin/announcements', {
+        token: alice.token,
+        body: {
+            title: 'Already over',
+            body: 'This one expires before anyone opens the app.',
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        }
+    })
+    assert.equal(created.status, 201)
+
+    // The API refuses a past expiry, so age it directly — this is the state a
+    // live announcement reaches on its own once the clock passes expiresAt.
+    await Announcement.updateOne(
+        { _id: created.body.id },
+        { expiresAt: new Date(Date.now() - 1000) }
+    )
+
+    // A brand-new account has a null watermark, so it has "seen nothing" —
+    // expiry is the only thing that can be keeping this back.
+    const latecomer = await makeUser('latecomer@homebase.test')
+    const feed = await api('GET', '/announcements', { token: latecomer.token })
+
+    assert.equal(feed.status, 200)
+    assert.ok(
+        !feed.body.some((a) => a.title === 'Already over'),
+        'an expired announcement must not be delivered'
+    )
+})
+
+test('an announcement cannot be created with an expiry in the past', async () => {
+    const r = await api('POST', '/admin/announcements', {
+        token: alice.token,
+        body: {
+            title: 'Pointless',
+            body: 'Nobody would ever see this.',
+            expiresAt: new Date(Date.now() - 60 * 1000).toISOString()
+        }
+    })
+    assert.equal(r.status, 400)
+
+    const missing = await api('POST', '/admin/announcements', {
+        token: alice.token,
+        body: { title: '', body: '', expiresAt: 'not a date' }
+    })
+    assert.equal(missing.status, 400)
+})
+
+test('announcements require an approved account', async () => {
+    const r = await api('POST', '/users/', {
+        body: { name: 'Waiting', email: 'waiting@homebase.test', password: PASSWORD }
+    })
+    assert.equal(r.status, 201)
+    // Same 403 protect gives every other member route — the audience for an
+    // announcement is exactly the set of accounts that may use the app.
+    assert.equal((await api('GET', '/announcements', { token: r.body.token })).status, 403)
+})
+
+// ── Account support actions ───────────────────────────────────────────────
+test('support actions refuse your own account and other admins', async () => {
+    const otherAdmin = await makeUser('admin2@homebase.test', 'admin')
+
+    for (const [method, suffix] of [
+        ['POST', '/revoke-sessions'],
+        ['POST', '/reset-2fa'],
+        ['DELETE', '']
+    ]) {
+        const onSelf = await api(method, `/admin/users/${alice.id}${suffix}`, {
+            token: alice.token,
+            body: { confirmEmail: alice.email }
+        })
+        assert.equal(onSelf.status, 400, `${method} ${suffix} must refuse self`)
+
+        const onAdmin = await api(method, `/admin/users/${otherAdmin.id}${suffix}`, {
+            token: alice.token,
+            body: { confirmEmail: otherAdmin.email }
+        })
+        assert.equal(onAdmin.status, 400, `${method} ${suffix} must refuse an admin target`)
+    }
+
+    // Still there — none of the refusals half-applied.
+    assert.equal((await api('GET', '/users/me', { token: otherAdmin.token })).status, 200)
+})
+
+test('revoking sessions invalidates the target\'s existing token', async () => {
+    const victim = await makeUser('revokeme@homebase.test')
+    assert.equal((await api('GET', '/users/me', { token: victim.token })).status, 200)
+
+    const r = await api('POST', `/admin/users/${victim.id}/revoke-sessions`, { token: alice.token })
+    assert.equal(r.status, 200)
+
+    // 401, not 403: the token is no longer valid at all, rather than the
+    // account being blocked. The account itself is untouched.
+    assert.equal((await api('GET', '/users/me', { token: victim.token })).status, 401)
+
+    const again = await api('POST', '/users/login', {
+        body: { email: victim.email, password: PASSWORD }
+    })
+    assert.equal(again.status, 200, 'the account must still be usable after a sign-out')
+})
+
+test('deleting an account requires the typed email and removes what it owned', async () => {
+    const doomed = await makeUser('doomed@homebase.test')
+
+    const uploaded = await upload(doomed.token, {
+        bytes: PNG, filename: 'photo.png', contentType: 'image/png'
+    })
+    assert.equal(uploaded.status, 201)
+
+    const folder = await api('POST', '/folders/create', {
+        token: doomed.token,
+        body: { name: 'Holiday' }
+    })
+    assert.equal(folder.status, 201)
+
+    // Wrong address, and no address at all, are both refused.
+    assert.equal(
+        (await api('DELETE', `/admin/users/${doomed.id}`, { token: alice.token })).status,
+        400
+    )
+    assert.equal(
+        (await api('DELETE', `/admin/users/${doomed.id}`, {
+            token: alice.token, body: { confirmEmail: 'someone@else.test' }
+        })).status,
+        400
+    )
+    assert.equal((await api('GET', '/users/me', { token: doomed.token })).status, 200)
+
+    const deleted = await api('DELETE', `/admin/users/${doomed.id}`, {
+        token: alice.token,
+        body: { confirmEmail: doomed.email }
+    })
+    assert.equal(deleted.status, 200, JSON.stringify(deleted.body))
+    assert.equal(deleted.body.fileCount, 1)
+
+    assert.equal((await api('GET', '/users/me', { token: doomed.token })).status, 401)
+    assert.equal(await User.countDocuments({ _id: doomed.id }), 0)
+
+    const File = require('../models/fileModel')
+    const Folder = require('../models/folderModel')
+    assert.equal(await File.countDocuments({ ownerId: doomed.id }), 0, 'files must go with the account')
+    assert.equal(await Folder.countDocuments({ ownerId: doomed.id }), 0, 'folders must go with the account')
+})
+
+test('deleting an account clears it from other people\'s sharedWith arrays', async () => {
+    const File = require('../models/fileModel')
+
+    const leaver = await makeUser('leaver@homebase.test')
+    const stayer = await makeUser('stayer@homebase.test')
+
+    const uploaded = await upload(stayer.token, {
+        bytes: PNG, filename: 'shared.png', contentType: 'image/png'
+    })
+    assert.equal(uploaded.status, 201)
+
+    const shared = await api('PATCH', `/files/${uploaded.body._id}/share`, {
+        token: stayer.token,
+        body: { userId: leaver.id }
+    })
+    assert.equal(shared.status, 200, JSON.stringify(shared.body))
+
+    const before = await File.findById(uploaded.body._id)
+    assert.equal(before.sharedWith.length, 1)
+
+    assert.equal(
+        (await api('DELETE', `/admin/users/${leaver.id}`, {
+            token: alice.token, body: { confirmEmail: leaver.email }
+        })).status,
+        200
+    )
+
+    // A dangling id here surfaces as a null in the share list's populate join.
+    const after = await File.findById(uploaded.body._id)
+    assert.equal(after.sharedWith.length, 0, 'a deleted user must not linger in sharedWith')
+})
+
+// ── Audit trail ───────────────────────────────────────────────────────────
+test('the audit log endpoint returns an envelope with a total', async () => {
+    const r = await api('GET', '/admin/audit?limit=5', { token: alice.token })
+    assert.equal(r.status, 200)
+    assert.ok(Array.isArray(r.body.rows), 'rows must be an array')
+    assert.equal(typeof r.body.total, 'number')
+    assert.ok(r.body.rows.length <= 5, 'the server-side bound must apply')
+    assert.ok(r.headers.get('x-total-count') !== null)
+})
+
+test('audit rows are not persisted under NODE_ENV=test', async () => {
+    const AuditLog = require('../models/auditLogModel')
+
+    // By this point the suite has driven registrations, logins, failed logins,
+    // admin status changes and account deletions — every one of which calls
+    // audit(). The DB sink must stay muted in test exactly as write() does, or
+    // a test run silently accumulates a security trail of fake accounts.
+    assert.equal(
+        await AuditLog.countDocuments({}),
+        0,
+        'audit persistence must be suppressed in the test environment'
+    )
+})
+
 // ── Pure unit checks ──────────────────────────────────────────────────────
 test('file signature detection identifies the allowed types', () => {
     assert.equal(detectType(PNG).mime, 'image/png')

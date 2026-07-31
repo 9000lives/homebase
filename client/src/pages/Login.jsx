@@ -24,6 +24,10 @@ const Login = () => {
   const location   = useLocation();
   const from = location.state?.from?.pathname ?? '/dashboard';
 
+  // Set by ForgotPassword after a successful reset, so the confirmation lands
+  // on the page they were sent to rather than on the one they left.
+  const notice = location.state?.notice ?? '';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -95,6 +99,10 @@ const Login = () => {
           <span>{error}</span>
         </div>
 
+        {notice && !error && (
+          <p className="auth-notice" role="status">{notice}</p>
+        )}
+
         {!pendingLoginToken ? (
           <form onSubmit={handleSubmit} className="auth-form" noValidate>
             <div className="form-group">
@@ -165,6 +173,9 @@ const Login = () => {
         )}
 
         <p className="auth-footer">
+          <Link to="/forgot-password">Forgot password?</Link>
+        </p>
+        <p className="auth-footer auth-footer--tight">
           Don't have an account?&nbsp;<Link to="/signup">Create one</Link>
         </p>
       </div>

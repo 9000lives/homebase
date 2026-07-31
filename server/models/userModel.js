@@ -50,9 +50,10 @@ const userSchema = mongoose.Schema({
             default: 'pending'
         },
         // Bumped whenever every existing session must stop working: password
-        // change, 2FA disable, logout. `protect` compares it against the `tv`
-        // claim in the presented token, which costs nothing extra because
-        // protect already loads this document on every request.
+        // change, password reset, 2FA disable, logout, and the admin
+        // revoke-sessions / reset-2fa actions. `protect` compares it against
+        // the `tv` claim in the presented token, which costs nothing extra
+        // because protect already loads this document on every request.
         tokenVersion: {
             type: Number,
             default: 0
@@ -60,6 +61,18 @@ const userSchema = mongoose.Schema({
         twoFactorEnabled: {
             type: Boolean,
             default: false
+        },
+        // Watermark for the announcement feed: everything created at or before
+        // this instant has been seen. Same idea as tokenVersion — one cheap
+        // scalar that settles a whole class of "has this been handled?" without
+        // an array that grows forever on the document `protect` loads on every
+        // authenticated request.
+        //
+        // null means "has seen nothing", so existing accounts correctly receive
+        // the next announcement without a migration.
+        lastSeenAnnouncementAt: {
+            type: Date,
+            default: null
         },
         twoFactorCodeHash: {
             type: String,
@@ -72,6 +85,27 @@ const userSchema = mongoose.Schema({
             select: false
         },
         twoFactorCodeAttempts: {
+            type: Number,
+            default: 0,
+            select: false
+        },
+        // A SECOND code slot, deliberately not the three fields above.
+        //
+        // Sharing one slot would mean a password-reset request silently
+        // clobbering a 2FA login challenge already in flight, and — worse — a
+        // code issued for one purpose being redeemable for the other. See the
+        // header comment in utils/otp.js.
+        passwordResetCodeHash: {
+            type: String,
+            default: null,
+            select: false
+        },
+        passwordResetExpires: {
+            type: Date,
+            default: null,
+            select: false
+        },
+        passwordResetAttempts: {
             type: Number,
             default: 0,
             select: false

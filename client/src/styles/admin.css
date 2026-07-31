@@ -353,6 +353,288 @@
   color-scheme: dark;
 }
 
+/* ── Announcements ──
+   The compose form reuses .form-group from auth.css (every stylesheet ends up
+   in one bundle, so those rules apply here). Only the textarea needs its own
+   rules — auth.css styles .form-group input but has never had a textarea. */
+
+.announcement-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 20px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.announcement-form .modal-button {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 9px 20px;
+}
+
+.announcement-form__body {
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-input-bg);
+  outline: none;
+  resize: vertical;
+  min-height: 84px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow   0.15s ease,
+    background   0.15s ease;
+}
+
+.announcement-form__body:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(0, 161, 219, 0.13);
+  background: var(--color-surface);
+}
+
+.announcement-form__body::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.announcement-form__count {
+  align-self: flex-end;
+  font-size: 11px;
+  color: var(--color-text-subtle);
+}
+
+/* The native datetime picker indicator is near-invisible on a dark surface. */
+:root[data-theme='dark'] .announcement-form input[type='datetime-local'] {
+  color-scheme: dark;
+}
+
+.announcement-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.announcement-row:last-child {
+  border-bottom: none;
+}
+
+.announcement-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.announcement-row__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  /* Titles run to 120 characters; without this a long one shoves the badge
+     and the delete button off the edge of the box. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.announcement-row__meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.announcement-row__delete {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* ── Audit log ── */
+
+.audit-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.audit-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.audit-row:last-child {
+  border-bottom: none;
+}
+
+.audit-row__tag {
+  flex: 0 0 auto;
+  min-width: 52px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+/* Categories carry a colour cue, but the word is always present — the colour
+   is never the only signal, same rule the storage legend follows. */
+.audit-row__tag--auth    { color: var(--chart-1); }
+.audit-row__tag--admin   { color: var(--chart-3); }
+.audit-row__tag--file    { color: var(--chart-2); }
+.audit-row__tag--folder  { color: var(--chart-4); }
+.audit-row__tag--user    { color: var(--chart-5); }
+.audit-row__tag--session,
+.audit-row__tag--ratelimit { color: var(--color-danger); }
+
+.audit-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.audit-row__action {
+  font-size: 13.5px;
+  color: var(--color-text);
+}
+
+.audit-row__who {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-row__ip {
+  color: var(--color-text-subtle);
+}
+
+.audit-row__when {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--color-text-subtle);
+  white-space: nowrap;
+}
+
+.audit-more {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px;
+  font-size: 13px;
+}
+
+/* ── System health ── */
+
+.health-list,
+.health-config {
+  display: flex;
+  flex-direction: column;
+}
+
+.health-config {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.health-row__label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  flex: 0 0 auto;
+}
+
+.health-row__value {
+  font-size: 13px;
+  color: var(--color-text);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-bar {
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 3px;
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.health-bar__fill {
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.health-test-button {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-top: 16px;
+  padding: 9px;
+  font-size: 13px;
+}
+
+/* ── Destructive confirmation (typed-email account deletion) ── */
+
+.admin-danger__lede {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.admin-danger__label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.admin-danger__label strong {
+  color: var(--color-text);
+  font-weight: 600;
+  /* Long addresses must wrap here rather than widening the dialog. */
+  overflow-wrap: anywhere;
+}
+
+.admin-danger__input {
+  width: 100%;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-input-bg);
+  outline: none;
+}
+
+.admin-danger__input:focus {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+/* The three support actions don't fit one row at the card's width. */
+.admin-detail__actions--wrap {
+  flex-wrap: wrap;
+}
+
 /* ── Responsive: the grid reflows on its own, so this only tightens padding ── */
 
 @media (max-width: 600px) {

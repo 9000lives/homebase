@@ -106,6 +106,18 @@ const downloadLimiter = make({
     keyGenerator: byUserOrIp
 })
 
+// The admin "is mail working?" button. Admin-only and harmless in intent, but
+// it is still an authenticated trigger for outbound mail — it spends SMTP quota
+// and can put the sending domain's reputation at risk if held down. The global
+// limiter's 1000/15min is not a meaningful bound on that.
+const testEmailLimiter = make({
+    name: 'test-email',
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many test emails, please wait before trying again.',
+    keyGenerator: byUserOrIp
+})
+
 module.exports = {
     globalLimiter,
     loginLimiter,
@@ -114,5 +126,6 @@ module.exports = {
     otpVerifyLimiter,
     userSearchLimiter,
     uploadLimiter,
-    downloadLimiter
+    downloadLimiter,
+    testEmailLimiter
 }

@@ -5,16 +5,18 @@
 // ============================================================
 
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Login     from './pages/Login';
 import Signup    from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Settings  from './pages/Settings';
 import Admin     from './pages/Admin';
-import ProtectedRoute from './components/ProtectedRoute';
-import AdminRoute     from './components/AdminRoute';
+import ProtectedRoute   from './components/ProtectedRoute';
+import AdminRoute       from './components/AdminRoute';
+import AnnouncementGate from './components/AnnouncementGate';
 
 // ── PublicRoute ───────────────────────────────────────────────
 // If the user IS already logged in, redirect them away from
@@ -32,11 +34,24 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
+          {/* Outside <Routes> on purpose: this is the app's only global UI
+              mount point, and being above the router is what keeps the
+              announcement modal from re-firing on every navigation.
+              See the header comment in AnnouncementGate.jsx. */}
+          <AnnouncementGate />
+
           <Routes>
 
             {/* ── Public routes (redirect to /dashboard if already logged in) ── */}
             <Route path="/login"  element={<PublicRoute><Login  /></PublicRoute>} />
             <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+
+            {/* Public too — someone already signed in has no use for a reset
+                form, so PublicRoute bounces them to /dashboard. */}
+            <Route
+              path="/forgot-password"
+              element={<PublicRoute><ForgotPassword /></PublicRoute>}
+            />
 
             {/* ── Protected routes (redirect to /login if NOT logged in) ── */}
             <Route

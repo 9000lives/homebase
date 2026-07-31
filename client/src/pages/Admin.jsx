@@ -10,6 +10,9 @@ import { useNavigate } from 'react-router-dom';
 import StorageBox from '../components/admin/StorageBox';
 import PendingAccountsBox from '../components/admin/PendingAccountsBox';
 import AccountSearchBox from '../components/admin/AccountSearchBox';
+import AnnouncementsBox from '../components/admin/AnnouncementsBox';
+import AuditLogBox from '../components/admin/AuditLogBox';
+import SystemHealthBox from '../components/admin/SystemHealthBox';
 import '../styles/dashboard.css';   // modal system, .share-user-tile*, .icon-button
 import '../styles/admin.css';
 
@@ -39,6 +42,14 @@ const Admin = () => {
           <StorageBox />
           <PendingAccountsBox version={dataVersion} onChanged={bump} />
           <AccountSearchBox version={dataVersion} onChanged={bump} />
+          {/* No version/onChanged: announcements and account status don't
+              affect each other, so neither needs to refetch on the other's
+              change — same reasoning as StorageBox above. */}
+          <AnnouncementsBox />
+          {/* Both append-only / read-only, so neither participates in
+              dataVersion either. */}
+          <AuditLogBox />
+          <SystemHealthBox />
         </div>
       </main>
     </div>

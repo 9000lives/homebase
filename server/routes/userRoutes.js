@@ -12,6 +12,8 @@ const {
     changePassword,              //PATCH changes password when 2FA is off
     requestPasswordChangeCode,  //POST sends a 2FA password-change code
     confirmPasswordChangeWithCode, //PATCH verifies the code and sets the new password
+    requestPasswordReset,       //POST emails a reset code (public)
+    resetPasswordWithCode,      //POST verifies the reset code and sets a new password (public)
     requestEnable2FA,           //POST sends a 2FA setup code
     confirmEnable2FA,           //POST verifies the code and turns 2FA on
     disable2FA                  //POST turns 2FA off (password-gated)
@@ -46,6 +48,30 @@ router.post('/login', loginLimiter, loginUser)
 // POST /api/users/login/2fa
 // Public — the loginToken (not a session JWT) is the credential here.
 router.post('/login/2fa', otpVerifyLimiter, loginWith2FA)
+
+// POST /api/users/password/forgot
+// Public — accepts { email } and emails a 6-digit reset code.
+//
+// Always answers with the SAME message whether or not that address is
+// registered. On a private whitelist platform the membership list is itself
+// sensitive, so this endpoint must not become a way to test who has an account.
+//
+// Rate-limited on the request side because it triggers outbound mail to an
+// address the caller chose. The limiter is keyed by IP; a per-account resend
+// cooldown in the controller covers the distributed case.
+//
+// NOTE: this and the route below are PUBLIC and must stay above the `/me/…`
+// section, which is the private self-service prefix.
+router.post('/password/forgot', otpRequestLimiter, requestPasswordReset)
+
+// POST /api/users/password/reset
+// Public — the emailed code is the credential, so no token is required or
+// returned. Accepts { email, code, newPassword, confirmNewPassword }.
+//
+// Rate-limited on verification: a 6-digit code is only a million combinations,
+// and this limiter plus OTP_MAX_ATTEMPTS per issued code is what bounds a
+// brute-force attempt.
+router.post('/password/reset', otpVerifyLimiter, resetPasswordWithCode)
 
 // POST /api/users/logout
 // Private — clears the 2FA trust window so the next login always re-challenges.

@@ -106,6 +106,44 @@ if (isProduction && TRUST_PROXY === false) {
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 100 * 1024 * 1024)
 const USER_STORAGE_QUOTA_BYTES = Number(process.env.USER_STORAGE_QUOTA_BYTES || 5 * 1024 * 1024 * 1024)
 
+// ── Mail ─────────────────────────────────────────────────────────────────
+// These were read directly by config/mailer.js, which contradicted this file's
+// own "only place that reads process.env" contract and left the one piece of
+// configuration with no startup validation at all. Centralized here so the
+// admin health panel can report whether mail is configured without reaching
+// into process.env itself.
+const SMTP_HOST = process.env.SMTP_HOST || ''
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587)
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true'
+const SMTP_USER = process.env.SMTP_USER || ''
+const SMTP_PASS = process.env.SMTP_PASS || ''
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER
+
+// Not fatal: the app runs fine without mail until something tries to send.
+// 2FA and approval notices are the things that break, so warn rather than exit.
+const SMTP_CONFIGURED = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS)
+
+if (!SMTP_CONFIGURED && !isTest) {
+    warnings.push(
+        'SMTP is not fully configured (needs SMTP_HOST, SMTP_USER, SMTP_PASS). ' +
+        'Two-factor codes and account-approval emails will fail to send.'
+    )
+}
+
+// ── Audit trail ──────────────────────────────────────────────────────────
+// audit() always writes to stdout. This governs the second, durable sink that
+// backs the admin dashboard's log viewer.
+//
+// The trail holds IP addresses and a behavioural record of every member, so it
+// ages out rather than accumulating forever. 90 days is long enough to
+// investigate an incident noticed late and short enough to bound the exposure.
+const AUDIT_RETENTION_DAYS = Number(process.env.AUDIT_RETENTION_DAYS || 90)
+const AUDIT_PERSIST = process.env.AUDIT_PERSIST !== 'false'
+
+if (!Number.isFinite(AUDIT_RETENTION_DAYS) || AUDIT_RETENTION_DAYS < 1) {
+    fatal.push('AUDIT_RETENTION_DAYS must be a positive number of days')
+}
+
 // ── Password policy ──────────────────────────────────────────────────────
 const PASSWORD_MIN_LENGTH = Number(process.env.PASSWORD_MIN_LENGTH || 12)
 // Checks candidate passwords against Have I Been Pwned using k-anonymity (only
@@ -149,5 +187,14 @@ module.exports = {
     MAX_UPLOAD_BYTES,
     USER_STORAGE_QUOTA_BYTES,
     PASSWORD_MIN_LENGTH,
-    PASSWORD_BREACH_CHECK
+    PASSWORD_BREACH_CHECK,
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_SECURE,
+    SMTP_USER,
+    SMTP_PASS,
+    SMTP_FROM,
+    SMTP_CONFIGURED,
+    AUDIT_RETENTION_DAYS,
+    AUDIT_PERSIST
 }

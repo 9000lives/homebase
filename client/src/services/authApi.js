@@ -123,6 +123,32 @@ export const logoutUser = async () => {
   }
 };
 
+// ── POST /api/users/password/forgot ───────────────────────────
+// Sends:   { email }
+// Returns: { message } — ALWAYS the same, whether or not that address has an
+//          account. Do not branch the UI on this response; there is nothing in
+//          it to branch on, and that is the point.
+//
+// Deliberately not routed through absorbCredentials: the reset endpoints are
+// public and return no credential of any kind.
+export const requestPasswordReset = (email) =>
+  apiFetch('/password/forgot', {
+    method:  'POST',
+    headers: buildHeaders(),
+    body:    JSON.stringify({ email }),
+  });
+
+// ── POST /api/users/password/reset ────────────────────────────
+// Sends:   { email, code, newPassword, confirmNewPassword }
+// Returns: { message } — no token. The user signs in afterwards, so an account
+//          with 2FA enabled still gets its second-factor challenge.
+export const resetPassword = ({ email, code, newPassword, confirmNewPassword }) =>
+  apiFetch('/password/reset', {
+    method:  'POST',
+    headers: buildHeaders(),
+    body:    JSON.stringify({ email, code, newPassword, confirmNewPassword }),
+  });
+
 // NOTE: the admin status-change call lives in services/adminApi.js as
 // setUserStatus() — it hits PATCH /api/admin/users/:id/status.
 

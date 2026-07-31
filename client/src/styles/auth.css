@@ -226,6 +226,64 @@ body {
   text-decoration: underline;
 }
 
+/* Second footer line in a stacked pair. The full 24px again would read as two
+   unrelated blocks rather than one group of links. */
+.auth-footer--tight {
+  margin-top: 8px;
+}
+
+/* ── Password reset ── */
+
+/* Explanatory copy at the top of a form — what this page is for, and what just
+   happened after a code was sent. */
+.auth-lede {
+  margin-bottom: 4px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* Secondary actions that sit under a primary .auth-button (resend, start over).
+   Same geometry so the stack aligns, but visually recessive — these must not
+   compete with the button that completes the flow. */
+.auth-button--quiet {
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  margin-top: 0;
+  padding: 9px;
+  font-size: 13.5px;
+}
+
+.auth-button--quiet:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.auth-button--quiet:active:not(:disabled) {
+  background: var(--color-surface-alt-hover);
+}
+
+/* Success confirmation carried over from another page (e.g. "Password
+   updated") — the positive counterpart to .error-banner. Always rendered
+   conditionally, so unlike the banner it needs no hidden state. */
+.auth-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  margin-bottom: 4px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-success);
+  border-radius: 8px;
+  background: var(--color-surface-alt);
+  color: var(--color-success);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 /* ── Spinner in button ── */
 @keyframes spin {
   to { transform: rotate(360deg); }

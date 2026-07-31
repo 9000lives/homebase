@@ -11,18 +11,25 @@
 // ============================================================
 
 import React, { useState, useEffect } from 'react';
-import { fetchAdminUser, setUserStatus } from '../../services/adminApi';
+import {
+  fetchAdminUser,
+  setUserStatus,
+  revokeUserSessions,
+  resetUserTwoFactor,
+  deleteUser,
+} from '../../services/adminApi';
 import { useAuth } from '../../context/AuthContext';
 import { formatBytes } from '../../utils/formatBytes';
 import { CloseIcon } from '../Icons';
 import StatusBadge from './StatusBadge';
+import ConfirmActionModal from '../ConfirmActionModal';
 
 const STATUSES = ['pending', 'active', 'suspended'];
 
 /**
  * @param {object}   initialUser - the tile's user, so the header paints instantly
  * @param {Function} onClose
- * @param {Function} onChanged   - called after a successful status change
+ * @param {Function} onChanged   - called after any successful mutation
  */
 const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
   const { user: currentUser } = useAuth();
@@ -35,6 +42,13 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
   const [mode, setMode]   = useState('idle');
   const [draft, setDraft] = useState(initialUser.status);
   const [status, setStatus] = useState({ type: null, text: '' });
+
+  // Support actions. One pending-action key drives a single ConfirmActionModal
+  // rather than three near-identical dialogs.
+  const [pendingAction, setPendingAction] = useState(null);   // 'revoke' | 'reset2fa' | 'delete'
+  const [actionBusy, setActionBusy]       = useState(false);
+  const [actionError, setActionError]     = useState('');
+  const [confirmEmail, setConfirmEmail]   = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -80,9 +94,115 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
     }
   };
 
+  const closeAction = () => {
+    setPendingAction(null);
+    setActionError('');
+    setConfirmEmail('');
+  };
+
+  const runAction = async (fn, successText, { closeOnSuccess = false } = {}) => {
+    setActionBusy(true);
+    setActionError('');
+    try {
+      await fn();
+      onChanged?.();
+      if (closeOnSuccess) {
+        onClose();
+        return;
+      }
+      closeAction();
+      setStatus({ type: 'success', text: successText });
+    } catch (err) {
+      // Dialog stays open with the server's reason, matching how the status
+      // change and the pending-queue activation both handle failure.
+      setActionError(err.message ?? 'Could not complete this action.');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleRevoke = () =>
+    runAction(
+      () => revokeUserSessions(user.id),
+      'Signed out of all devices.'
+    );
+
+  const handleReset2fa = () =>
+    runAction(
+      async () => {
+        const updated = await resetUserTwoFactor(user.id);
+        setDetail((d) => (d ? { ...d, twoFactorEnabled: updated.twoFactorEnabled } : d));
+      },
+      'Two-factor authentication turned off. They have been emailed.'
+    );
+
+  const handleDelete = () =>
+    runAction(
+      () => deleteUser(user.id, confirmEmail),
+      '',
+      // Nothing left to show once the account is gone.
+      { closeOnSuccess: true }
+    );
+
+  // Mirrors the server's check so the button doesn't arm until the address
+  // matches. The server re-checks it — this is the UX half.
+  const deleteArmed = confirmEmail.trim().toLowerCase() === user.email.toLowerCase();
+
+  const ACTION_DIALOGS = {
+    revoke: {
+      title: 'Sign out of all devices?',
+      body: `${user.displayName} will be signed out everywhere and will have to enter their password again. This device will also have to pass a two-factor challenge next time. Their account stays active.`,
+      confirmLabel: 'Sign out everywhere',
+      variant: 'primary',
+      onConfirm: handleRevoke,
+    },
+    reset2fa: {
+      title: 'Turn off two-factor authentication?',
+      body: `${user.displayName} will be able to sign in with just their password, and will be signed out of all devices. They'll get an email telling them this happened. Use this when someone has lost access to their email.`,
+      confirmLabel: 'Turn off 2FA',
+      variant: 'primary',
+      onConfirm: handleReset2fa,
+    },
+    delete: {
+      title: 'Delete this account?',
+      body: (
+        <>
+          <span className="admin-danger__lede">
+            This permanently deletes {user.displayName}, {detail
+              ? `their ${detail.storage.fileCount} ${detail.storage.fileCount === 1 ? 'file' : 'files'} (${formatBytes(detail.storage.bytes)})`
+              : 'all their files'}, and every folder they own. It cannot be undone.
+          </span>
+          <label className="admin-danger__label" htmlFor="confirm-delete-email">
+            Type <strong>{user.email}</strong> to confirm
+          </label>
+          <input
+            id="confirm-delete-email"
+            className="admin-danger__input"
+            type="text"
+            value={confirmEmail}
+            autoComplete="off"
+            disabled={actionBusy}
+            onChange={(e) => setConfirmEmail(e.target.value)}
+          />
+        </>
+      ),
+      confirmLabel: 'Delete account',
+      variant: 'danger',
+      confirmDisabled: !deleteArmed,
+      onConfirm: handleDelete,
+    },
+  };
+
+  const dialog = pendingAction ? ACTION_DIALOGS[pendingAction] : null;
+
   return (
-    // dismissal suppressed while saving, so a stray backdrop click can't
-    // unmount this component with a request in flight
+    // The confirm dialog is a SIBLING of this overlay, not a child — nested
+    // inside it, a click on the inner backdrop would bubble to the outer
+    // overlay's onClick and dismiss this modal too. PreviewModal stacks
+    // ShareModal the same way.
+    <>
+    {/* dismissal suppressed while saving, so a stray backdrop click can't
+        unmount this component with a request in flight */}
     <div className="modal-overlay" onClick={saving ? undefined : onClose}>
       <div className="modal-card modal-card--wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-card__header">
@@ -113,6 +233,13 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
           </div>
           <div className="admin-detail__sub">
             Files they own; files shared with them aren&apos;t counted.
+          </div>
+        </div>
+
+        <div className="admin-detail__row">
+          <div className="admin-detail__label">Two-factor</div>
+          <div className="admin-detail__value">
+            {loading || !detail ? '—' : detail.twoFactorEnabled ? 'Enabled' : 'Not enabled'}
           </div>
         </div>
 
@@ -167,13 +294,49 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
             </div>
           )}
 
+          {/* Covers the actions row below as well as this one — the server
+              refuses both for the same two reasons. */}
           {changeBlocked && (
             <div className="admin-detail__sub">
               {isSelf
-                ? "You can't change your own account status."
+                ? "You can't change or act on your own account here."
                 : 'Admin accounts can only be changed directly in the database.'}
             </div>
           )}
+        </div>
+
+        <div className="admin-detail__row">
+          <div className="admin-detail__label">Account actions</div>
+          <div className="admin-detail__actions admin-detail__actions--wrap">
+            <button
+              type="button"
+              className="modal-button modal-button--ghost"
+              onClick={() => setPendingAction('revoke')}
+              disabled={changeBlocked}
+            >
+              Sign out everywhere
+            </button>
+            <button
+              type="button"
+              className="modal-button modal-button--ghost"
+              onClick={() => setPendingAction('reset2fa')}
+              // Nothing to reset if it was never on.
+              disabled={changeBlocked || !detail?.twoFactorEnabled}
+            >
+              Reset 2FA
+            </button>
+            <button
+              type="button"
+              className="modal-button modal-button--danger"
+              onClick={() => setPendingAction('delete')}
+              disabled={changeBlocked}
+            >
+              Delete account
+            </button>
+          </div>
+          {/* No blocked-reason line here: the identical explanation already
+              renders one row up under Account status, and repeating it reads
+              as two separate problems. */}
         </div>
 
         {status.text && (
@@ -181,6 +344,21 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
         )}
       </div>
     </div>
+
+    {dialog && (
+      <ConfirmActionModal
+        title={dialog.title}
+        body={dialog.body}
+        confirmLabel={dialog.confirmLabel}
+        variant={dialog.variant}
+        confirmDisabled={dialog.confirmDisabled ?? false}
+        loading={actionBusy}
+        error={actionError}
+        onClose={closeAction}
+        onConfirm={dialog.onConfirm}
+      />
+    )}
+    </>
   );
 };
 

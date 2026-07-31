@@ -6,14 +6,20 @@ const User = require('../models/userModel')
 const File = require('../models/fileModel')
 const Folder = require('../models/folderModel')
 const { sendMail } = require('../config/mailer')
-const { generateOtp, hashOtp, verifyOtp, OTP_TTL_MINUTES } = require('../utils/otp')
+const {
+    issueOtp,
+    verifyOtp,
+    clearOtp,
+    PASSWORD_RESET_FIELDS,
+    OTP_TTL_MINUTES
+} = require('../utils/otp')
 const { signSessionToken, signPreAuthToken, verifyPreAuthToken } = require('../utils/tokens')
 const { assertPasswordAcceptable } = require('../utils/passwordPolicy')
 const { isTrustedDevice, trustDevice, revokeDevice, revokeAllDevices } = require('../utils/deviceTrust')
 const { validateItemName } = require('../utils/names')
 const { badRequest, unauthorized, forbidden } = require('../utils/httpError')
 const { optionalObjectId } = require('../utils/ownership')
-const { audit, actorFrom } = require('../utils/logger')
+const { log, audit, actorFrom } = require('../utils/logger')
 
 const BCRYPT_COST = 12
 
@@ -119,10 +125,7 @@ const loginUser = asyncHandler(async (req, res) => {
     const trusted = user.twoFactorEnabled && isTrustedDevice(user, deviceToken)
 
     if (user.twoFactorEnabled && !trusted) {
-        const code = generateOtp()
-        user.twoFactorCodeHash = await hashOtp(code)
-        user.twoFactorCodeExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000)
-        user.twoFactorCodeAttempts = 0
+        const code = await issueOtp(user)
         await user.save()
 
         await sendMail({
@@ -313,9 +316,12 @@ const changeUsername = asyncHandler(async (req, res) => {
     })
 })
 
-// Shared tail of both password-change paths: hash, invalidate every outstanding
-// session, drop trusted devices, and hand the caller a fresh token so the
-// browser that just changed the password isn't signed out by its own action.
+// Shared tail of every password-change path — the two self-service ones and the
+// public reset: hash, invalidate every outstanding session, drop trusted
+// devices, and kill any pending reset code.
+//
+// The two self-service callers hand the browser a fresh token afterwards so it
+// isn't signed out by its own action. The reset path deliberately does not.
 const applyNewPassword = async (user, newPassword, req) => {
     user.passwordHash = await hashPassword(newPassword)
 
@@ -324,6 +330,12 @@ const applyNewPassword = async (user, newPassword, req) => {
     // attacker holding a token kept full access for the rest of its lifetime.
     user.tokenVersion += 1
     revokeAllDevices(user)
+
+    // Any outstanding reset code dies with the old password, whichever path got
+    // here. Otherwise someone who requests a reset, then remembers their
+    // password and changes it from Settings, leaves a live reset credential
+    // sitting in their inbox for the rest of its ten minutes.
+    clearOtp(user, PASSWORD_RESET_FIELDS)
 
     await user.save()
 
@@ -367,10 +379,7 @@ const requestPasswordChangeCode = asyncHandler(async (req, res) => {
         throw badRequest('2FA is not enabled on this account')
     }
 
-    const code = generateOtp()
-    req.user.twoFactorCodeHash = await hashOtp(code)
-    req.user.twoFactorCodeExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000)
-    req.user.twoFactorCodeAttempts = 0
+    const code = await issueOtp(req.user)
     await req.user.save()
 
     await sendMail({
@@ -413,6 +422,149 @@ const confirmPasswordChangeWithCode = asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Password updated', token: signSessionToken(user) })
 })
 
+// ── Password reset (public, unauthenticated) ─────────────────────────────────
+//
+// The one response every path out of requestPasswordReset returns. Held in a
+// constant rather than written at each `return`, because the whole point is
+// that these paths are indistinguishable: account exists, account doesn't
+// exist, account is suspended, a code was sent sixty seconds ago. Any of them
+// differing turns this endpoint into a membership oracle for a private
+// whitelist platform where the member list is itself sensitive.
+const RESET_REQUESTED_RESPONSE = {
+    message: 'If an account exists for that address, a reset code has been sent.'
+}
+
+// How long before another code can be minted for the same account. The route's
+// otpRequestLimiter bounds one IP to 5 requests per 15 minutes, but it is keyed
+// by address — a distributed caller could still use it to flood one member's
+// inbox. This bounds it per account instead.
+const RESET_RESEND_COOLDOWN_MS = 60 * 1000
+
+// @desc    Start a password reset by emailing a one-time code (step 1 of 2).
+// @route   POST /api/users/password/forgot
+// @access  Public (no token required)
+const requestPasswordReset = asyncHandler(async (req, res) => {
+    const email = readEmail(req.body.email)
+
+    const user = await User.findOne({ email })
+        .select('+passwordResetCodeHash +passwordResetExpires +passwordResetAttempts')
+
+    // No account: stop here, but answer exactly as if there had been one.
+    if (!user) {
+        audit('auth.password_reset_requested', { ...actorFrom(req), email, matched: false })
+        return res.status(200).json(RESET_REQUESTED_RESPONSE)
+    }
+
+    // Status is deliberately NOT checked. A pending or suspended account may
+    // reset its password; doing so grants nothing, because `protect` rejects
+    // both on every request regardless. Filtering here would create precisely
+    // the oracle the shared response exists to prevent.
+
+    // A live code was minted within the cooldown — don't send a second one, and
+    // don't say so.
+    const issuedRecently =
+        user.passwordResetExpires &&
+        user.passwordResetExpires.getTime() - Date.now() >
+            OTP_TTL_MINUTES * 60 * 1000 - RESET_RESEND_COOLDOWN_MS
+
+    if (issuedRecently) {
+        return res.status(200).json(RESET_REQUESTED_RESPONSE)
+    }
+
+    const code = await issueOtp(user, PASSWORD_RESET_FIELDS)
+    await user.save()
+
+    audit('auth.password_reset_requested', {
+        ...actorFrom(req),
+        userId: user._id.toString()
+    })
+
+    res.status(200).json(RESET_REQUESTED_RESPONSE)
+
+    // Sent AFTER the response and NOT awaited — unlike every other OTP mail in
+    // this file, which awaits and lets a delivery failure surface as a 503.
+    //
+    // That difference is the whole point. Mail is only ever attempted when the
+    // account exists, so awaiting it here would mean:
+    //
+    //     unknown address            -> 200
+    //     real address, SMTP broken  -> 503
+    //
+    // which hands out the membership list of a private platform to anyone
+    // willing to try it during an outage. The other OTP routes don't have this
+    // problem because they sit behind a password check or a session.
+    //
+    // The cost is that a genuine delivery failure is silent to the user. That's
+    // the right trade here, and the operator can see it: the failure is logged,
+    // and the admin dashboard has a "Send test email" button plus a mail-status
+    // row for exactly this.
+    sendMail({
+        to: user.email,
+        subject: 'Homebase password reset code',
+        text:
+            `Your Homebase password reset code is ${code}. ` +
+            `It expires in ${OTP_TTL_MINUTES} minutes.\n\n` +
+            `If you didn't ask to reset your password, you can ignore this email — ` +
+            `your password has not been changed.\n`
+    }).catch((error) => log.error('password reset email failed', {
+        userId: user._id.toString(),
+        error
+    }))
+})
+
+// @desc    Verify the emailed code and set a new password (step 2 of 2).
+// @route   POST /api/users/password/reset
+// @access  Public (the emailed code is the credential here)
+const resetPasswordWithCode = asyncHandler(async (req, res) => {
+    const { code, newPassword, confirmNewPassword } = req.body
+    const email = readEmail(req.body.email)
+
+    if (!newPassword || newPassword !== confirmNewPassword) {
+        throw badRequest('New passwords do not match')
+    }
+
+    const user = await User.findOne({ email })
+        .select(
+            '+passwordResetCodeHash +passwordResetExpires +passwordResetAttempts +trustedDevices'
+        )
+
+    // No such account gets the wrong-code error, not a 404 — otherwise step 2
+    // hands back the enumeration step 1 was careful not to give away.
+    if (!user) {
+        audit('auth.password_reset_failed', { ...actorFrom(req), email })
+        throw badRequest('Incorrect verification code.')
+    }
+
+    // Policy BEFORE the code is consumed, so a rejected password doesn't burn a
+    // one-time code and force the user to request a fresh email. Same ordering
+    // and same reasoning as confirmPasswordChangeWithCode above.
+    await assertPasswordAcceptable(newPassword, { email: user.email, displayName: user.displayName })
+
+    const result = await verifyOtp(user, code, PASSWORD_RESET_FIELDS)
+
+    if (!result.ok) {
+        // verifyOtp mutates attempt/clear state; persist it either way so a
+        // failed attempt still counts against the cap.
+        await user.save()
+        audit('auth.password_reset_failed', { ...actorFrom(req), userId: user._id.toString() })
+        throw badRequest(result.reason)
+    }
+
+    // Bumps tokenVersion, drops trusted devices, clears the reset slot, saves.
+    await applyNewPassword(user, newPassword, req)
+
+    audit('auth.password_reset_completed', {
+        ...actorFrom(req),
+        userId: user._id.toString()
+    })
+
+    // No token. This endpoint is public, and handing back a session here would
+    // skip the 2FA challenge for an account that has it enabled — the reset
+    // proves control of the inbox, not possession of a second factor. The
+    // client sends them to /login to sign in normally.
+    res.status(200).json({ message: 'Password updated' })
+})
+
 // @desc    Send an email verification code to start enabling 2FA (step 1 of 2).
 // @route   POST /api/users/me/2fa/enable
 // @access  Private
@@ -421,10 +573,7 @@ const requestEnable2FA = asyncHandler(async (req, res) => {
         throw badRequest('2FA is already enabled')
     }
 
-    const code = generateOtp()
-    req.user.twoFactorCodeHash = await hashOtp(code)
-    req.user.twoFactorCodeExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000)
-    req.user.twoFactorCodeAttempts = 0
+    const code = await issueOtp(req.user)
     await req.user.save()
 
     await sendMail({
@@ -500,6 +649,8 @@ module.exports = {
     changePassword,
     requestPasswordChangeCode,
     confirmPasswordChangeWithCode,
+    requestPasswordReset,
+    resetPasswordWithCode,
     requestEnable2FA,
     confirmEnable2FA,
     disable2FA

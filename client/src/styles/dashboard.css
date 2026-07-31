@@ -531,6 +531,32 @@
   color: var(--color-success);
 }
 
+/* ── Announcement modal ──
+   Lives here rather than in admin.css because AnnouncementGate mounts above
+   the router and can therefore paint over any page, not just /admin. */
+
+.announcement-modal__sent {
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+.announcement-modal__body {
+  /* Announcement text is authored in a textarea, so newlines the admin typed
+     are meaningful. Without this they collapse into one run-on paragraph. */
+  white-space: pre-wrap;
+  font-size: 14px;
+  color: var(--color-text);
+  margin-bottom: 0;
+}
+
+.announcement-modal__counter {
+  align-self: center;
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
 /* ── Preview modal ── */
 .preview-card {
   background: var(--color-surface);

@@ -1,14 +1,22 @@
 const nodemailer = require('nodemailer')
 const { HttpError } = require('../utils/httpError')
 const { log } = require('../utils/logger')
+const {
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_SECURE,
+    SMTP_USER,
+    SMTP_PASS,
+    SMTP_FROM
+} = require('../config/env')
 
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === 'true',
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
     auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
+        user: SMTP_USER,
+        pass: SMTP_PASS
     }
 })
 
@@ -21,7 +29,7 @@ const transporter = nodemailer.createTransport({
 const sendMail = async ({ to, subject, text, html }) => {
     try {
         return await transporter.sendMail({
-            from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            from: SMTP_FROM,
             to,
             subject,
             text,
