@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const { Schema } = mongoose
+const { MAX_NAME_LENGTH } = require('../utils/names')
 
 const fileSchema = mongoose.Schema({
     ownerId: {
@@ -9,10 +10,14 @@ const fileSchema = mongoose.Schema({
     },
     name: {
         type: String,
-        required: [true, 'Please add a file name']
+        required: [true, 'Please add a file name'],
+        trim: true,
+        maxlength: [MAX_NAME_LENGTH, 'File name is too long']
     },
     size: {
-        type: Number
+        type: Number,
+        default: 0,
+        min: 0
     },
     mimeType: {
         type: String
@@ -22,7 +27,8 @@ const fileSchema = mongoose.Schema({
     },
     parentFolderId: {
         type: Schema.Types.ObjectId,
-        ref: 'Folder'
+        ref: 'Folder',
+        default: null
     },
     sharedWith: {
         type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
@@ -33,5 +39,11 @@ const fileSchema = mongoose.Schema({
         default: Date.now
     }
 })
+
+// Directory listings and the per-user storage aggregation used for quota
+// enforcement. Without these both are collection scans.
+fileSchema.index({ ownerId: 1, parentFolderId: 1 })
+fileSchema.index({ parentFolderId: 1 })
+fileSchema.index({ sharedWith: 1 })
 
 module.exports = mongoose.model('File', fileSchema)

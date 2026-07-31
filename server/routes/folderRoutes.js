@@ -11,6 +11,7 @@ const { createFolder,
         shareFolder,
         unshareFolder } = require('../controllers/folderController')
 const { protect } = require('../middleware/authMiddleware')
+const { downloadLimiter } = require('../middleware/rateLimiters')
 
 // POST /api/folders/create
 // Private — protect runs first and verifies the JWT from the Authorization header.
@@ -36,8 +37,10 @@ router.get('/search', protect, searchFolders)
 router.delete('/:id/delete', protect, deleteFolder)
 
 // GET /api/folders/:id/download
-// Private - only the owner can download; streams a zip of the folder and all its contents
-router.get('/:id/download', protect, downloadFolder)
+// Private - only the owner can download; streams a zip of the folder and all its contents.
+// Rate-limited separately: zip generation walks the whole subtree and streams a
+// compressed archive, which is far more costly than an ordinary read.
+router.get('/:id/download', protect, downloadLimiter, downloadFolder)
 
 // PATCH /api/folders/:id/rename
 // Private - only the owner of the folder can rename it

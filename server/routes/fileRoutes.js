@@ -12,13 +12,31 @@ const { uploadFile,
         shareFile,
         unshareFile } = require('../controllers/fileController')
 const { protect } = require('../middleware/authMiddleware')
-const upload = require('../middleware/uploadMiddleware')
+const { upload, enforceStorageQuota, verifyUploadedFile } = require('../middleware/uploadMiddleware')
+const { uploadLimiter, downloadLimiter } = require('../middleware/rateLimiters')
 
 // POST /api/files/upload
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Calls protect to verify user, then calls the upload middleware to upload the file to the server
-// then calls uploadFile to create the cooresponding file in our database
-router.post('/upload', protect, upload.single('file'), uploadFile)
+// Private. The order of this chain is a security control, not a style choice:
+//   protect             — establishes req.user, which the storage path is keyed on
+//   uploadLimiter       — bounds the rate before any bytes are accepted
+//   enforceStorageQuota — rejects an over-quota user BEFORE Multer writes to disk
+//   upload.single       — writes to <uploads>/<userId>/<uuid> with no extension
+//   verifyUploadedFile  — magic-byte check; the client's declared type and the
+//                         actual bytes must agree, and the stored extension is
+//                         derived from the VERIFIED type
+//   uploadFile          — authorizes the destination folder and creates the row
+//
+// Any throw after Multer has written leaves the bytes on disk, so the error
+// handler unlinks req.file.path on every error path.
+router.post(
+    '/upload',
+    protect,
+    uploadLimiter,
+    enforceStorageQuota,
+    upload.single('file'),
+    verifyUploadedFile,
+    uploadFile
+)
 
 // GET /api/files
 // Private - only fetches files that the user owns
@@ -34,38 +52,33 @@ router.get('/shared', protect, getSharedFiles)
 router.get('/search', protect, searchFiles)
 
 // GET /api/files/:id/download
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Calls the res.download to attach the specified file as an attachment to the request
-router.get('/:id/download', protect, downloadFile)
+// Private — attaches the specified file as an attachment to the response
+router.get('/:id/download', protect, downloadLimiter, downloadFile)
 
 // GET /api/files/:id/view
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Serves the file inline (Content-Type set, no attachment disposition) for previewing in the browser
-router.get('/:id/view', protect, viewFile)
+// Private — serves the file inline for previewing in the browser, with
+// nosniff and a sandboxing CSP so a mismatched type can't be sniffed into a
+// document running in this origin
+router.get('/:id/view', protect, downloadLimiter, viewFile)
 
 // DELETE /api/files/:id/delete
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Checks if file exsits, verifies the user owns file, then deletes it from the server and the database
+// Private — verifies the user owns the file, then removes the row and unlinks the bytes
 router.delete('/:id/delete', protect, deleteFile)
 
 // PATCH /api/files/:id/rename
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Checks if file exsits, verifies the user owns file, then updates the name of the file in the database
+// Private — verifies ownership, validates the new name, then updates it
 router.patch('/:id/rename', protect, updateFileName)
 
 // PATCH /api/files/:id/move
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Checks if file exsits, verifies the user owns file, then updates the parent folder of the file in the database
+// Private — verifies ownership of BOTH the file and the destination folder
 router.patch('/:id/move', protect, updateFileFolder)
 
 // PATCH /api/files/:id/share
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Checks if file exists, verifies the user owns it, then adds userId (from the body) to sharedWith
+// Private — verifies the user owns it, then adds userId (from the body) to sharedWith
 router.patch('/:id/share', protect, shareFile)
 
 // PATCH /api/files/:id/unshare
-// Private — protect runs first and verifies the JWT from the Authorization header.
-// Checks if file exists, verifies the user owns it, then removes userId (from the body) from sharedWith
+// Private — verifies the user owns it, then removes userId (from the body) from sharedWith
 router.patch('/:id/unshare', protect, unshareFile)
 
 module.exports = router

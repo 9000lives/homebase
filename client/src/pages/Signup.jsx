@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { signupUser } from '../services/authApi';
+import { signupUser, PASSWORD_MIN_LENGTH } from '../services/authApi';
 import '../styles/auth.css';
 
 const Signup = () => {
@@ -21,6 +21,15 @@ const Signup = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // UX only — saves a round trip on the most common rejection. The server
+    // enforces this and more (breach check, similarity to your own name/email),
+    // and remains the authority.
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      setError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -92,9 +101,13 @@ const Signup = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               autoComplete="new-password"
+              minLength={PASSWORD_MIN_LENGTH}
               required
               disabled={loading}
             />
+            <p className="form-hint">
+              At least {PASSWORD_MIN_LENGTH} characters. A memorable phrase beats a short complex password.
+            </p>
           </div>
 
           <button type="submit" className="auth-button" disabled={loading}>

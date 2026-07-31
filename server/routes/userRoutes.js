@@ -18,12 +18,24 @@ const {
 } = require('../controllers/userController')
 
 const { protect } = require('../middleware/authMiddleware')
-const { loginLimiter, otpRequestLimiter, otpVerifyLimiter } = require('../middleware/rateLimiters')
+const {
+    loginLimiter,
+    registerLimiter,
+    otpRequestLimiter,
+    otpVerifyLimiter,
+    userSearchLimiter
+} = require('../middleware/rateLimiters')
 
 // POST - /api/users/
 // Public — no token required. Accepts { name, email, password } in the request body.
-// Registers a new user and returns a JWT so the client is authenticated immediately.
-router.post('/', registerUser)
+// Registers a new user and returns a JWT so the client is authenticated immediately
+// (the account is still `pending` and cannot use the platform until an admin
+// approves it, so the token grants nothing on its own).
+//
+// Rate-limited: this is the only unauthenticated write endpoint, and each call
+// costs a deliberately-expensive bcrypt cost-12 hash plus a row in the admin
+// approval queue.
+router.post('/', registerLimiter, registerUser)
 
 // POST /api/users/login
 // Public — no token required. Accepts { email, password } in the request body.
@@ -48,7 +60,12 @@ router.get('/me', protect, getMe)
 // GET /api/users/search?q=<term>&fileId=<optional>
 // Private — used by the file-sharing search modal to find active users by
 // email or displayName. Excludes the requesting user themself.
-router.get('/search', protect, searchUsers)
+//
+// Rate-limited per ACCOUNT (not per IP): this endpoint returns real names and
+// email addresses, and on a private whitelist platform the membership list is
+// itself sensitive. The limit bounds how much of the directory any one user can
+// extract. A 3-character minimum query is enforced in the controller.
+router.get('/search', protect, userSearchLimiter, searchUsers)
 
 // NOTE: PATCH /:id/status moved to routes/adminRoutes.js as
 // PATCH /api/admin/users/:id/status — all admin endpoints live under /api/admin.

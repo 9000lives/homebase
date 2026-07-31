@@ -137,6 +137,13 @@ body {
   letter-spacing: 0.01em;
 }
 
+.form-group .form-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
 .form-group input {
   border: 1.5px solid #d1d5db;
   border-radius: 8px;

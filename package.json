@@ -2,9 +2,9 @@
   "name": "homebase",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test server/tests/*.test.js",
     "start": "node server/server.js",
     "dev": "nodemon server/server.js"
   },
@@ -15,19 +15,16 @@
   "dependencies": {
     "archiver": "^8.0.0",
     "bcryptjs": "^3.0.3",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-async-handler": "^1.2.0",
     "express-rate-limit": "^8.0.0",
-    "express-validator": "^7.3.2",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.6.1",
     "multer": "^2.1.1",
-    "nodemailer": "^8.0.7",
-    "react-router-dom": "^7.18.1",
+    "nodemailer": "^9.0.3",
     "uuid": "^14.0.0"
   },
   "devDependencies": {

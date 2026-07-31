@@ -1,116 +1,155 @@
 const asyncHandler = require('express-async-handler')
-const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const User = require('../models/userModel')
 // used read-only in searchUsers to check whether a candidate is already
 // in a given file's or folder's sharedWith list
 const File = require('../models/fileModel')
 const Folder = require('../models/folderModel')
-const req = require('express/lib/request')
 const { sendMail } = require('../config/mailer')
 const { generateOtp, hashOtp, verifyOtp, OTP_TTL_MINUTES } = require('../utils/otp')
+const { signSessionToken, signPreAuthToken, verifyPreAuthToken } = require('../utils/tokens')
+const { assertPasswordAcceptable } = require('../utils/passwordPolicy')
+const { isTrustedDevice, trustDevice, revokeDevice, revokeAllDevices } = require('../utils/deviceTrust')
+const { validateItemName } = require('../utils/names')
+const { badRequest, unauthorized, forbidden } = require('../utils/httpError')
+const { optionalObjectId } = require('../utils/ownership')
+const { audit, actorFrom } = require('../utils/logger')
 
-const TRUST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const BCRYPT_COST = 12
+
+// Minimum characters before the sharing search will return anything. A
+// single-letter query used to return 15 arbitrary members, which made the
+// whole directory — real names and email addresses — enumerable a page at a
+// time by any approved account.
+const MIN_SEARCH_LENGTH = 3
+
+// Basic shape check only; the authoritative test is whether the address
+// receives the verification mail.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Normalizes an email from a request body. Validates type BEFORE dereferencing:
+// the previous `rawEmail.toLowerCase()` ran ahead of the presence check, so a
+// body with no `email` threw a TypeError and returned a 500 (with a stack
+// trace) to an unauthenticated caller.
+const readEmail = (value) => {
+    if (typeof value !== 'string') throw badRequest('A valid email address is required')
+    const email = value.trim().toLowerCase()
+    if (!email || email.length > 254 || !EMAIL_PATTERN.test(email)) {
+        throw badRequest('A valid email address is required')
+    }
+    return email
+}
+
+// Query params arrive as an array when a parameter is repeated (?q=a&q=b), so
+// `q.trim()` threw. Take the first value and require a string.
+const readQueryString = (value) => {
+    const raw = Array.isArray(value) ? value[0] : value
+    return typeof raw === 'string' ? raw.trim() : ''
+}
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const hashPassword = async (password) => bcrypt.hash(password, await bcrypt.genSalt(BCRYPT_COST))
+
+// The authenticated-session payload. One shape, one place to change it.
+const sessionResponse = (user, extra = {}) => ({
+    _id: user.id,
+    name: user.displayName,
+    email: user.email,
+    // AuthContext stores this from the login response; without it an admin
+    // who just logged in has no role until /me re-hydrates on refresh
+    role: user.role,
+    token: signSessionToken(user),
+    twoFactorEnabled: user.twoFactorEnabled,
+    ...extra
+})
 
 // @desc    Register a new user
 // @route   POST /api/users/
 // @access  Public (no token required)
 const registerUser = asyncHandler(async (req, res) => {
+    const { name, email: rawEmail, password } = req.body
 
-    // destructure fields from the JSON body
-    const {name: displayName, email: rawEmail, password} = req.body
-    // change the email to lowercase so when we comapre it to
-    // the database it matches schema
-    const email = rawEmail.toLowerCase()
+    const email = readEmail(rawEmail)
+    const displayName = validateItemName(name, 'Display name')
 
-    // make sure all fields are present
-    if(!displayName|| !email || !password) {
-        throw new Error("Please fill all fields")
-    }
+    // Enforced here AND on both password-change paths — a policy applied only
+    // at registration is bypassed by registering weakly and never changing.
+    await assertPasswordAcceptable(password, { email, displayName })
 
-    //Check if a user with this email already exists
     const userExists = await User.findOne({ email })
-    if(userExists) {
-        res.status(400)
-        throw new Error('User already exsists')
+    if (userExists) {
+        throw badRequest('An account with that email already exists')
     }
 
-    const salt = await bcrypt.genSalt(12)
-    const passwordHash = await bcrypt.hash(password, salt)
-
+    const passwordHash = await hashPassword(password)
     const user = await User.create({ displayName, email, passwordHash })
 
-    if(user) {
-        res.status(201).json({
-            _id: user.id,
-            name: user.displayName,
-            email: user.email,
-            role: user.role,
-            token: generateToken(user._id)
-        })
-    }
-    else {
-        res.status(400)
-        throw new Error('Invalid user data')
-    }
+    audit('user.registered', { ...actorFrom(req), userId: user._id.toString() })
+
+    // Every account starts `pending` and cannot use the platform until an
+    // admin promotes it, so issuing a token here grants nothing but a
+    // consistent client flow.
+    res.status(201).json(sessionResponse(user))
 })
 
 // @desc    Authenticate an existing user and return a token.
-//          If the account has 2FA enabled and isn't within its 7-day trust
-//          window, this sends an email code and returns a loginToken instead
-//          of a real token — see loginWith2FA for the second step.
+//          If the account has 2FA enabled and the request doesn't present a
+//          trusted device token, this sends an email code and returns a
+//          loginToken instead — see loginWith2FA for the second step.
 // @route   POST /api/users/login/
 // @access  Public (no token required)
 const loginUser = asyncHandler(async (req, res) => {
+    const { password, deviceToken } = req.body
+    const email = readEmail(req.body.email)
 
-    // destructure credentials from the JSON body
-    const {email: rawEmail, password} = req.body
-    // change the email to lowercase to match DB schema
-    const email = rawEmail.toLowerCase()
+    const user = await User.findOne({ email }).select('+trustedDevices')
 
-
-    const user = await User.findOne({ email })
-
-    if(user && (await bcrypt.compare(password, user.passwordHash))) {
-        //credentials are valid
-
-        const isTrusted = user.twoFactorTrustedUntil && user.twoFactorTrustedUntil > new Date()
-
-        if (user.twoFactorEnabled && !isTrusted) {
-            const code = generateOtp()
-            user.twoFactorCodeHash = await hashOtp(code)
-            user.twoFactorCodeExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000)
-            user.twoFactorCodeAttempts = 0
-            await user.save()
-
-            await sendMail({
-                to: user.email,
-                subject: 'Homebase login verification code',
-                text: `Your Homebase login verification code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes.`
-            })
-
-            return res.status(200).json({
-                twoFactorRequired: true,
-                loginToken: generatePreAuthToken(user._id)
-            })
-        }
-
-        res.json({
-            _id: user.id,
-            name: user.displayName,
-            email: user.email,
-            // AuthContext stores this from the login response; without it an admin
-            // who just logged in has no role until /me re-hydrates on refresh
-            role: user.role,
-            token: generateToken(user._id),
-            twoFactorEnabled: user.twoFactorEnabled
-        })
-    } else {
-        // no user found OR invalid credentials
-        // same error in both cases to avoid leaking whether an email is registers or not
-        res.status(400)
-        throw new Error('Invalid Credentials')
+    // Identical error for "no such account" and "wrong password" so this
+    // endpoint cannot be used to discover which addresses are registered.
+    if (!user || typeof password !== 'string' || !(await bcrypt.compare(password, user.passwordHash))) {
+        audit('auth.login_failed', { ...actorFrom(req), email })
+        throw badRequest('Invalid Credentials')
     }
+
+    // Trust is bound to the DEVICE that completed a challenge, not to the
+    // account. The old account-wide `twoFactorTrustedUntil` meant one
+    // legitimate 2FA login disabled the second factor for anyone holding the
+    // password, anywhere, for a week.
+    const trusted = user.twoFactorEnabled && isTrustedDevice(user, deviceToken)
+
+    if (user.twoFactorEnabled && !trusted) {
+        const code = generateOtp()
+        user.twoFactorCodeHash = await hashOtp(code)
+        user.twoFactorCodeExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000)
+        user.twoFactorCodeAttempts = 0
+        await user.save()
+
+        await sendMail({
+            to: user.email,
+            subject: 'Homebase login verification code',
+            text: `Your Homebase login verification code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes.`
+        })
+
+        audit('auth.2fa_challenged', { ...actorFrom(req), userId: user._id.toString() })
+
+        return res.status(200).json({
+            twoFactorRequired: true,
+            // Signed with a DIFFERENT secret than a session token and carrying
+            // scope 'login-2fa'. It cannot authenticate any protected route.
+            loginToken: signPreAuthToken(user)
+        })
+    }
+
+    if (trusted) await user.save()   // persist the device's lastUsedAt
+
+    audit('auth.login_succeeded', {
+        ...actorFrom(req),
+        userId: user._id.toString(),
+        trustedDevice: trusted
+    })
+
+    res.json(sessionResponse(user))
 })
 
 // @desc    Complete a 2FA-challenged login by verifying the emailed code.
@@ -121,57 +160,62 @@ const loginWith2FA = asyncHandler(async (req, res) => {
 
     let decoded
     try {
-        decoded = jwt.verify(loginToken, process.env.JWT_SECRET)
-    } catch (error) {
-        res.status(401)
-        throw new Error('Login session expired, please sign in again')
-    }
-
-    if (decoded.scope !== 'login-2fa') {
-        res.status(401)
-        throw new Error('Invalid login session')
+        // Verifies against JWT_PREAUTH_SECRET and asserts scope 'login-2fa'.
+        decoded = verifyPreAuthToken(loginToken)
+    } catch {
+        throw unauthorized('Login session expired, please sign in again')
     }
 
     const user = await User.findById(decoded.id)
-        .select('+twoFactorCodeHash +twoFactorCodeExpires +twoFactorCodeAttempts')
+        .select('+twoFactorCodeHash +twoFactorCodeExpires +twoFactorCodeAttempts +trustedDevices')
 
     if (!user) {
-        res.status(401)
-        throw new Error('Invalid login session')
+        throw unauthorized('Invalid login session')
     }
 
     const result = await verifyOtp(user, code)
 
     if (!result.ok) {
+        // verifyOtp mutates attempt/clear state; persist it either way so a
+        // failed attempt still counts.
         await user.save()
-        res.status(400)
-        throw new Error(result.reason)
+        audit('auth.2fa_failed', { ...actorFrom(req), userId: user._id.toString() })
+        throw badRequest(result.reason)
     }
 
-    user.twoFactorTrustedUntil = new Date(Date.now() + TRUST_WINDOW_MS)
+    // This browser may skip the challenge until the device entry expires.
+    const newDeviceToken = trustDevice(user, { userAgent: req.get('user-agent') })
     await user.save()
 
-    res.json({
-        _id: user.id,
-        name: user.displayName,
-        email: user.email,
-        role: user.role,
-        token: generateToken(user._id),
-        // was missing entirely, so AuthContext's !!rawUser.twoFactorEnabled
-        // resolved to false and Settings claimed 2FA was off after a 2FA login
-        twoFactorEnabled: user.twoFactorEnabled
-    })
+    audit('auth.2fa_succeeded', { ...actorFrom(req), userId: user._id.toString() })
+
+    res.json(sessionResponse(user, { deviceToken: newDeviceToken }))
 })
 
-// @desc    Sign the current user out server-side. Revokes the 2FA "remember
-//          this login for a week" trust window, so a manual sign-out always
-//          forces the challenge again next time — unlike letting a session
-//          simply expire.
+// @desc    Sign the current user out server-side.
+//          Bumps tokenVersion, which invalidates every session token issued for
+//          this account, and drops the trusted device so the next login from it
+//          is challenged again.
 // @route   POST /api/users/logout
 // @access  Private
 const logout = asyncHandler(async (req, res) => {
-    req.user.twoFactorTrustedUntil = null
-    await req.user.save()
+    const user = await User.findById(req.user.id).select('+trustedDevices')
+    if (!user) throw unauthorized('Not authorized')
+
+    // "Log out" now actually logs you out. Previously it cleared only the 2FA
+    // trust window and left the JWT valid for up to seven more days.
+    user.tokenVersion += 1
+
+    if (typeof req.body?.deviceToken === 'string') {
+        revokeDevice(user, req.body.deviceToken)
+    } else {
+        revokeAllDevices(user)
+    }
+
+    await user.save()
+
+    audit('auth.logout', { ...actorFrom(req), userId: user._id.toString() })
+
     res.status(200).json({ message: 'Logged out' })
 })
 
@@ -183,17 +227,12 @@ const logout = asyncHandler(async (req, res) => {
 // @route   GET /api/users/me
 // @access  Private (requires a valid JWT — enforced by the `protect` middleware)
 const getMe = asyncHandler(async (req, res) => {
-    // req.user doesnt exsist by defualt, it is created and sent from the protect middlware
-    // the protect middleware validates the JWT, decodes the user ID, and fetches the user from the DB
-    const { _id, displayName, email, role, twoFactorEnabled } = await User.findById(req.user.id)
+    // protect already loaded and validated this document — reuse it rather than
+    // issuing a second query that could return null if the user was deleted in
+    // between (which used to throw on destructuring and surface as a 500).
+    const { _id, displayName, email, role, twoFactorEnabled } = req.user
 
-    res.status(200).json({
-        id: _id,
-        displayName,
-        email,
-        role,
-        twoFactorEnabled
-    })
+    res.status(200).json({ id: _id, displayName, email, role, twoFactorEnabled })
 })
 
 // @desc    Search active users by email or displayName, for sharing files.
@@ -202,15 +241,19 @@ const getMe = asyncHandler(async (req, res) => {
 // @route   GET /api/users/search?q=<term>&fileId=<optional>
 // @access  Private (requires a valid JWT — enforced by the `protect` middleware)
 const searchUsers = asyncHandler(async (req, res) => {
-    const { q, fileId, folderId } = req.query
+    const q = readQueryString(req.query.q)
+    const fileId = optionalObjectId(req.query.fileId, 'file id')
+    const folderId = optionalObjectId(req.query.folderId, 'folder id')
 
-    if (!q || !q.trim()) {
+    // On a private whitelist platform the membership list is itself sensitive.
+    // A minimum length turns "walk the alphabet" into "already know roughly who
+    // you're looking for", which is the actual sharing use case.
+    if (q.length < MIN_SEARCH_LENGTH) {
         return res.json([])
     }
 
     // escape regex metacharacters so search terms like "a.b" or "(" don't break the query
-    const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const pattern = new RegExp(escaped, 'i')
+    const pattern = new RegExp(escapeRegex(q), 'i')
 
     const users = await User.find({
         _id: { $ne: req.user.id },
@@ -251,20 +294,16 @@ const changeUsername = asyncHandler(async (req, res) => {
     const { password, displayName } = req.body
 
     const user = await User.findById(req.user.id)
+    if (!user) throw unauthorized('Not authorized')
 
-    if (!password || !(await bcrypt.compare(password, user.passwordHash))) {
-        res.status(401)
-        throw new Error('Incorrect password')
+    if (typeof password !== 'string' || !(await bcrypt.compare(password, user.passwordHash))) {
+        throw unauthorized('Incorrect password')
     }
 
-    const trimmedName = (displayName || '').trim()
-    if (!trimmedName) {
-        res.status(400)
-        throw new Error('Display name cannot be empty')
-    }
-
-    user.displayName = trimmedName
+    user.displayName = validateItemName(displayName, 'Display name')
     await user.save()
+
+    audit('user.username_changed', { ...actorFrom(req), userId: user._id.toString() })
 
     res.status(200).json({
         id: user._id,
@@ -274,6 +313,23 @@ const changeUsername = asyncHandler(async (req, res) => {
     })
 })
 
+// Shared tail of both password-change paths: hash, invalidate every outstanding
+// session, drop trusted devices, and hand the caller a fresh token so the
+// browser that just changed the password isn't signed out by its own action.
+const applyNewPassword = async (user, newPassword, req) => {
+    user.passwordHash = await hashPassword(newPassword)
+
+    // Changing your password is the single most important thing a user does
+    // when they suspect compromise. Without this it evicted nobody — an
+    // attacker holding a token kept full access for the rest of its lifetime.
+    user.tokenVersion += 1
+    revokeAllDevices(user)
+
+    await user.save()
+
+    audit('user.password_changed', { ...actorFrom(req), userId: user._id.toString() })
+}
+
 // @desc    Change the current user's password when 2FA is NOT enabled —
 //          requires the current password plus the new password twice.
 // @route   PATCH /api/users/me/password
@@ -282,27 +338,24 @@ const changePassword = asyncHandler(async (req, res) => {
     const { currentPassword, newPassword, confirmNewPassword } = req.body
 
     if (!newPassword || newPassword !== confirmNewPassword) {
-        res.status(400)
-        throw new Error('New passwords do not match')
+        throw badRequest('New passwords do not match')
     }
 
-    const user = await User.findById(req.user.id)
+    const user = await User.findById(req.user.id).select('+trustedDevices')
+    if (!user) throw unauthorized('Not authorized')
 
     if (user.twoFactorEnabled) {
-        res.status(403)
-        throw new Error('2FA is enabled on this account — use the verification code flow to change your password')
+        throw forbidden('2FA is enabled on this account — use the verification code flow to change your password')
     }
 
-    if (!currentPassword || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
-        res.status(401)
-        throw new Error('Incorrect current password')
+    if (typeof currentPassword !== 'string' || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+        throw unauthorized('Incorrect current password')
     }
 
-    const salt = await bcrypt.genSalt(12)
-    user.passwordHash = await bcrypt.hash(newPassword, salt)
-    await user.save()
+    await assertPasswordAcceptable(newPassword, { email: user.email, displayName: user.displayName })
+    await applyNewPassword(user, newPassword, req)
 
-    res.status(200).json({ message: 'Password updated' })
+    res.status(200).json({ message: 'Password updated', token: signSessionToken(user) })
 })
 
 // @desc    Send an email verification code to start a 2FA-gated password
@@ -311,8 +364,7 @@ const changePassword = asyncHandler(async (req, res) => {
 // @access  Private
 const requestPasswordChangeCode = asyncHandler(async (req, res) => {
     if (!req.user.twoFactorEnabled) {
-        res.status(400)
-        throw new Error('2FA is not enabled on this account')
+        throw badRequest('2FA is not enabled on this account')
     }
 
     const code = generateOtp()
@@ -338,26 +390,27 @@ const confirmPasswordChangeWithCode = asyncHandler(async (req, res) => {
     const { code, newPassword, confirmNewPassword } = req.body
 
     if (!newPassword || newPassword !== confirmNewPassword) {
-        res.status(400)
-        throw new Error('New passwords do not match')
+        throw badRequest('New passwords do not match')
     }
 
     const user = await User.findById(req.user.id)
-        .select('+twoFactorCodeHash +twoFactorCodeExpires +twoFactorCodeAttempts')
+        .select('+twoFactorCodeHash +twoFactorCodeExpires +twoFactorCodeAttempts +trustedDevices')
+    if (!user) throw unauthorized('Not authorized')
+
+    // Check the policy BEFORE consuming the one-time code, so a rejected
+    // password doesn't force the user to request a fresh code.
+    await assertPasswordAcceptable(newPassword, { email: user.email, displayName: user.displayName })
 
     const result = await verifyOtp(user, code)
 
     if (!result.ok) {
         await user.save()
-        res.status(400)
-        throw new Error(result.reason)
+        throw badRequest(result.reason)
     }
 
-    const salt = await bcrypt.genSalt(12)
-    user.passwordHash = await bcrypt.hash(newPassword, salt)
-    await user.save()
+    await applyNewPassword(user, newPassword, req)
 
-    res.status(200).json({ message: 'Password updated' })
+    res.status(200).json({ message: 'Password updated', token: signSessionToken(user) })
 })
 
 // @desc    Send an email verification code to start enabling 2FA (step 1 of 2).
@@ -365,8 +418,7 @@ const confirmPasswordChangeWithCode = asyncHandler(async (req, res) => {
 // @access  Private
 const requestEnable2FA = asyncHandler(async (req, res) => {
     if (req.user.twoFactorEnabled) {
-        res.status(400)
-        throw new Error('2FA is already enabled')
+        throw badRequest('2FA is already enabled')
     }
 
     const code = generateOtp()
@@ -391,21 +443,24 @@ const confirmEnable2FA = asyncHandler(async (req, res) => {
     const { code } = req.body
 
     const user = await User.findById(req.user.id)
-        .select('+twoFactorCodeHash +twoFactorCodeExpires +twoFactorCodeAttempts')
+        .select('+twoFactorCodeHash +twoFactorCodeExpires +twoFactorCodeAttempts +trustedDevices')
+    if (!user) throw unauthorized('Not authorized')
 
     const result = await verifyOtp(user, code)
 
     if (!result.ok) {
         await user.save()
-        res.status(400)
-        throw new Error(result.reason)
+        throw badRequest(result.reason)
     }
 
     user.twoFactorEnabled = true
-    user.twoFactorTrustedUntil = new Date(Date.now() + TRUST_WINDOW_MS)
+    // The browser that just enrolled is trusted; every other one is challenged.
+    const newDeviceToken = trustDevice(user, { userAgent: req.get('user-agent') })
     await user.save()
 
-    res.status(200).json({ twoFactorEnabled: true })
+    audit('user.2fa_enabled', { ...actorFrom(req), userId: user._id.toString() })
+
+    res.status(200).json({ twoFactorEnabled: true, deviceToken: newDeviceToken })
 })
 
 // @desc    Disable 2FA. Password-gated since it lowers account security.
@@ -414,45 +469,26 @@ const confirmEnable2FA = asyncHandler(async (req, res) => {
 const disable2FA = asyncHandler(async (req, res) => {
     const { password } = req.body
 
-    const user = await User.findById(req.user.id)
+    const user = await User.findById(req.user.id).select('+trustedDevices')
+    if (!user) throw unauthorized('Not authorized')
 
-    if (!password || !(await bcrypt.compare(password, user.passwordHash))) {
-        res.status(401)
-        throw new Error('Incorrect password')
+    if (typeof password !== 'string' || !(await bcrypt.compare(password, user.passwordHash))) {
+        throw unauthorized('Incorrect password')
     }
 
     user.twoFactorEnabled = false
-    user.twoFactorTrustedUntil = null
+    revokeAllDevices(user)
+    // Lowering the account's security bar invalidates sessions established
+    // under the higher one.
+    user.tokenVersion += 1
     await user.save()
 
-    res.status(200).json({ twoFactorEnabled: false })
+    audit('user.2fa_disabled', { ...actorFrom(req), userId: user._id.toString() })
+
+    res.status(200).json({ twoFactorEnabled: false, token: signSessionToken(user) })
 })
 
-// Helper: Generate a signed JSON Web Token (JWT)
-// Called after successful registration and login.
-const generateToken = (id) => {
-    return jwt.sign(
-        { id },                      // Payload — the data embedded inside the token (kept minimal: just the user ID)
-        process.env.JWT_SECRET,      // Secret key used to sign the token — must be kept private on the server; anyone with this key can forge tokens
-        {
-            expiresIn: '7d'         // Expiry — token becomes invalid after 7 days, forcing re-login and limiting the window of damage if a token is ever stolen
-        }
-    )
-}
-
-// Helper: Generate a short-lived token identifying which login is pending a
-// 2FA challenge. Distinct `scope` keeps it from being usable as a real
-// session token even though it's signed with the same secret.
-const generatePreAuthToken = (id) => {
-    return jwt.sign(
-        { id, scope: 'login-2fa' },
-        process.env.JWT_SECRET,
-        { expiresIn: '10m' }
-    )
-}
-
 // export controller functions so they can be connected to routes in userRoutes.js
-// do not include generateToken/generatePreAuthToken as they are only intended to be used inside of the controller
 module.exports = {
     registerUser,
     loginUser,

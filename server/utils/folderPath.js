@@ -23,14 +23,31 @@ async function buildFolderPathMap(ownerId) {
     // Resolve each folder's full trail, memoizing as we go.
     const pathMap = new Map()
 
+    // Cycle guard. The memo alone is not enough: it is written AFTER the
+    // recursive call returns, so a cycle re-enters resolve() before
+    // pathMap.has(id) can ever short-circuit, recursing until the stack blows.
+    // `inProgress` marks a node on entry, which is the point a cycle is
+    // detectable.
+    const inProgress = new Set()
+
     const resolve = (id) => {
         if (pathMap.has(id)) return pathMap.get(id)
 
         const node = byId.get(id)
         if (!node) return []   // missing/deleted ancestor — stop the chain
 
+        if (inProgress.has(id)) {
+            // A cycle. Treat the chain as ending here rather than throwing —
+            // this only feeds a display breadcrumb, so degrading to a partial
+            // path is better than failing the whole search request.
+            return []
+        }
+        inProgress.add(id)
+
         const parentPath = node.parentFolderId ? resolve(node.parentFolderId) : []
         const trail = [...parentPath, { _id: id, name: node.name }]
+
+        inProgress.delete(id)
         pathMap.set(id, trail)
         return trail
     }
