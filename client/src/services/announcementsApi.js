@@ -4,24 +4,7 @@
 //  them is an admin action and lives in services/adminApi.js.
 // ============================================================
 
-import { getStoredToken } from './authApi';
-
-// ✏️  Change the port to match your backend
-const ANNOUNCEMENTS_API_URL = 'http://localhost:3000/api/announcements';
-
-const buildJsonHeaders = () => {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = getStoredToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
-
-const apiFetch = async (url, options = {}) => {
-  const response = await fetch(url, options);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw body;
-  return body;
-};
+import { ANNOUNCEMENTS_API_URL, apiFetch, authHeaders } from './apiClient';
 
 // ── GET /api/announcements ──
 /**
@@ -31,7 +14,7 @@ const apiFetch = async (url, options = {}) => {
 export const fetchActiveAnnouncements = () =>
   apiFetch(ANNOUNCEMENTS_API_URL, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── PATCH /api/announcements/seen ──
@@ -43,5 +26,5 @@ export const fetchActiveAnnouncements = () =>
 export const markAnnouncementsSeen = () =>
   apiFetch(`${ANNOUNCEMENTS_API_URL}/seen`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });

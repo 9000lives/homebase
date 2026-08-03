@@ -2,8 +2,17 @@
 //  src/services/authApi.js
 // ============================================================
 
-// ✏️  Change the port to match your backend
-const API_BASE_URL = 'http://localhost:3000/api/users';
+// Only the origin and the raw request are shared with apiClient.js. Everything
+// below — the storage keys, absorbCredentials, and the session helpers — stays
+// here deliberately: this module is the single place a credential is written to
+// or read from localStorage, and spreading that across the service layer is how
+// a rotated token quietly stops being absorbed.
+//
+// The import is from apiConfig, NOT apiClient: apiClient imports getStoredToken
+// from this file, so importing it back here would be a cycle. This module also
+// keeps its own header builder — it needs a no-auth variant that apiClient
+// doesn't have.
+import { USERS_API_URL as API_BASE_URL } from './apiConfig';
 
 const TOKEN_KEY  = 'homebase_token';
 const USER_KEY   = 'homebase_user';

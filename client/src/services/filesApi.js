@@ -11,40 +11,41 @@
 //      storagePath from the uploaded file + auth token; the
 //      client only needs to send the file itself + parentFolderId
 //
-//  ✏️  SETUP: set the two base URLs below.
+//  The API origin, the fetch wrapper and the header builders all live in
+//  services/apiClient.js — configure the origin there (VITE_API_URL).
 // ============================================================
 
-import { getStoredToken } from './authApi';
+import {
+  FILES_API_URL,
+  FOLDERS_API_URL,
+  apiFetch,
+  apiFetchList,
+  authHeaders,
+  uploadHeaders,
+  fetchBlob,
+} from './apiClient';
 
-// ── ✏️  CHANGE THESE to match your backend ──────────────────
-const FILES_API_URL   = 'http://localhost:3000/api/files';
-const FOLDERS_API_URL = 'http://localhost:3000/api/folders';
-// ──────────────────────────────────────────────────────────
-
-// Headers for normal JSON requests.
-const buildJsonHeaders = () => {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = getStoredToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
-
-// Headers for multipart/form-data uploads.
-// IMPORTANT: do NOT set 'Content-Type' here — the browser sets it
-// automatically (including the multipart boundary) when the body
-// is a FormData instance. Setting it manually breaks the upload.
-const buildUploadHeaders = () => {
-  const headers = {};
-  const token = getStoredToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
-
-const apiFetch = async (url, options = {}) => {
-  const response = await fetch(url, options);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw body;
-  return body;
+/**
+ * Folders and files are separate resources server-side, but the UI treats them
+ * as one list. Both the directory load and the search do the same thing:
+ * request the pair in parallel, tag each item with its `type`, concatenate.
+ *
+ * Totals are summed across the two, because "showing 200 of 412" has to count
+ * folders and files together — that's the single list the user is looking at.
+ *
+ * @param   {Promise<{items: Array, total: number}>} foldersPromise
+ * @param   {Promise<{items: Array, total: number}>} filesPromise
+ * @returns {Promise<{items: Array, total: number}>}
+ */
+const mergeTagged = async (foldersPromise, filesPromise) => {
+  const [folders, files] = await Promise.all([foldersPromise, filesPromise]);
+  return {
+    items: [
+      ...folders.items.map((f) => ({ ...f, type: 'folder' })),
+      ...files.items.map((f) => ({ ...f, type: 'file' })),
+    ],
+    total: folders.total + files.total,
+  };
 };
 
 // ── ✏️  LIST FOLDERS in a directory ─────────────────────────
@@ -55,9 +56,9 @@ const apiFetch = async (url, options = {}) => {
 export const fetchFolders = (ownerId, parentFolderId = null) => {
   const params = new URLSearchParams({ ownerId });
   if (parentFolderId) params.append('parentFolderId', parentFolderId);
-  return apiFetch(`${FOLDERS_API_URL}?${params.toString()}`, {
+  return apiFetchList(`${FOLDERS_API_URL}?${params.toString()}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 };
 
@@ -69,9 +70,9 @@ export const fetchFolders = (ownerId, parentFolderId = null) => {
 export const fetchFiles = (ownerId, parentFolderId = null) => {
   const params = new URLSearchParams({ ownerId });
   if (parentFolderId) params.append('parentFolderId', parentFolderId);
-  return apiFetch(`${FILES_API_URL}?${params.toString()}`, {
+  return apiFetchList(`${FILES_API_URL}?${params.toString()}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 };
 
@@ -82,17 +83,11 @@ export const fetchFiles = (ownerId, parentFolderId = null) => {
  * the rest of the app can treat them as one unified list — even
  * though your backend keeps them as separate resources.
  */
-export const fetchDirectoryContents = async (ownerId, parentFolderId = null) => {
-  const [folders, files] = await Promise.all([
+export const fetchDirectoryContents = (ownerId, parentFolderId = null) =>
+  mergeTagged(
     fetchFolders(ownerId, parentFolderId),
     fetchFiles(ownerId, parentFolderId),
-  ]);
-
-  const taggedFolders = folders.map((f) => ({ ...f, type: 'folder' }));
-  const taggedFiles   = files.map((f) => ({ ...f, type: 'file' }));
-
-  return [...taggedFolders, ...taggedFiles];
-};
+  );
 
 // ── SEARCH (whole tree, own items only) ─────────────────────
 /**
@@ -101,9 +96,9 @@ export const fetchDirectoryContents = async (ownerId, parentFolderId = null) => 
  * of its folder's ancestors so the UI can show where the match lives.
  */
 export const searchFiles = (query) =>
-  apiFetch(`${FILES_API_URL}/search?q=${encodeURIComponent(query)}`, {
+  apiFetchList(`${FILES_API_URL}/search?q=${encodeURIComponent(query)}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 /**
@@ -111,9 +106,9 @@ export const searchFiles = (query) =>
  * `path` here is the matched folder's ancestors, excluding itself.
  */
 export const searchFolders = (query) =>
-  apiFetch(`${FOLDERS_API_URL}/search?q=${encodeURIComponent(query)}`, {
+  apiFetchList(`${FOLDERS_API_URL}/search?q=${encodeURIComponent(query)}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 /**
@@ -121,17 +116,8 @@ export const searchFolders = (query) =>
  * ('folder' | 'file'), mirroring fetchDirectoryContents. Results already
  * carry `path` from the server.
  */
-export const searchDirectory = async (query) => {
-  const [folders, files] = await Promise.all([
-    searchFolders(query),
-    searchFiles(query),
-  ]);
-
-  const taggedFolders = folders.map((f) => ({ ...f, type: 'folder' }));
-  const taggedFiles   = files.map((f) => ({ ...f, type: 'file' }));
-
-  return [...taggedFolders, ...taggedFiles];
-};
+export const searchDirectory = (query) =>
+  mergeTagged(searchFolders(query), searchFiles(query));
 
 // ── ✏️  CREATE A FOLDER ──────────────────────────────────────
 /**
@@ -142,7 +128,7 @@ export const searchDirectory = async (query) => {
 export const createFolder = (name, parentFolderId = null) =>
   apiFetch(`${FOLDERS_API_URL}/create`, {
     method:  'POST',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ name, parentFolderId }),
   });
 
@@ -168,7 +154,7 @@ export const uploadFile = (file, parentFolderId = null) => {
 
   return apiFetch(`${FILES_API_URL}/upload`, {
     method:  'POST',
-    headers: buildUploadHeaders(),
+    headers: uploadHeaders(),
     body:    formData,
   });
 };
@@ -177,14 +163,14 @@ export const uploadFile = (file, parentFolderId = null) => {
 export const renameFolder = (id, name) =>
   apiFetch(`${FOLDERS_API_URL}/${id}/rename`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ name }),
   });
 
 export const renameFile = (id, name) =>
   apiFetch(`${FILES_API_URL}/${id}/rename`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ name }),
   });
 
@@ -192,27 +178,27 @@ export const renameFile = (id, name) =>
 export const deleteFolder = (id) =>
   apiFetch(`${FOLDERS_API_URL}/${id}/delete`, {
     method:  'DELETE',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 export const deleteFile = (id) =>
   apiFetch(`${FILES_API_URL}/${id}/delete`, {
     method:  'DELETE',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── SHARING ──────────────────────────────────────────────────
 export const shareFile = (fileId, userId) =>
   apiFetch(`${FILES_API_URL}/${fileId}/share`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ userId }),
   });
 
 export const unshareFile = (fileId, userId) =>
   apiFetch(`${FILES_API_URL}/${fileId}/unshare`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ userId }),
   });
 
@@ -220,20 +206,20 @@ export const unshareFile = (fileId, userId) =>
 export const fetchSharedFiles = () =>
   apiFetch(`${FILES_API_URL}/shared`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 export const shareFolder = (folderId, userId) =>
   apiFetch(`${FOLDERS_API_URL}/${folderId}/share`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ userId }),
   });
 
 export const unshareFolder = (folderId, userId) =>
   apiFetch(`${FOLDERS_API_URL}/${folderId}/unshare`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ userId }),
   });
 
@@ -241,24 +227,15 @@ export const unshareFolder = (folderId, userId) =>
 export const fetchSharedFolders = () =>
   apiFetch(`${FOLDERS_API_URL}/shared`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── PREVIEW / DOWNLOAD ──────────────────────────────────────
-// Auth is header-based, so a plain <img>/<iframe>/<a> src can't include
-// the token — fetch the file as a Blob instead and hand the caller an
-// object URL (via URL.createObjectURL) to use as the src/href.
-const fetchBlob = async (url) => {
-  const response = await fetch(url, {
-    method:  'GET',
-    headers: buildJsonHeaders(),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw body;
-  }
-  return response.blob();
-};
+// Auth is header-based, so a plain <img>/<iframe>/<a> src can't include the
+// token — the bytes are fetched as a Blob and the caller gets an object URL
+// (via URL.createObjectURL) to use as the src/href instead. fetchBlob now lives
+// in apiClient.js; the reason it must never take a token in the URL is
+// documented there.
 
 // GET /api/files/:id/view — inline-served bytes, correct Content-Type, no forced download
 export const fetchFilePreview = (id) => fetchBlob(`${FILES_API_URL}/${id}/view`);

@@ -5,6 +5,7 @@
 // ============================================================
 
 import React from 'react';
+import Modal from './Modal';
 
 /**
  * @param {object}   item      - { _id, name, type: 'folder' | 'file' }
@@ -13,24 +14,27 @@ import React from 'react';
  * @param {boolean}  loading   - disables the buttons while a request is in flight
  */
 const ConfirmDeleteModal = ({ item, onClose, onConfirm, loading }) => (
-  <div className="modal-overlay" onClick={onClose}>
-    <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-      <h2 className="modal-title">Delete {item.type === 'folder' ? 'folder' : 'file'}?</h2>
-      <p className="modal-text">
-        {item.type === 'folder'
-          ? `"${item.name}" and everything inside it will be permanently deleted. This can't be undone.`
-          : `"${item.name}" will be permanently deleted. This can't be undone.`}
-      </p>
-      <div className="modal-actions">
-        <button type="button" className="modal-button modal-button--ghost" onClick={onClose} disabled={loading}>
-          Cancel
-        </button>
-        <button type="button" className="modal-button modal-button--danger" onClick={onConfirm} disabled={loading}>
-          {loading ? 'Deleting…' : 'Delete'}
-        </button>
-      </div>
+  // Dismissal suppressed while the delete is in flight, so neither a stray
+  // backdrop click nor Escape can unmount this mid-request.
+  <Modal
+    title={`Delete ${item.type === 'folder' ? 'folder' : 'file'}?`}
+    onClose={onClose}
+    dismissible={!loading}
+  >
+    <p className="modal-text">
+      {item.type === 'folder'
+        ? `"${item.name}" and everything inside it will be permanently deleted. This can't be undone.`
+        : `"${item.name}" will be permanently deleted. This can't be undone.`}
+    </p>
+    <div className="modal-actions">
+      <button type="button" className="modal-button modal-button--ghost" onClick={onClose} disabled={loading}>
+        Cancel
+      </button>
+      <button type="button" className="modal-button modal-button--danger" onClick={onConfirm} disabled={loading}>
+        {loading ? 'Deleting…' : 'Delete'}
+      </button>
     </div>
-  </div>
+  </Modal>
 );
 
 export default ConfirmDeleteModal;

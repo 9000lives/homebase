@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { signupUser, PASSWORD_MIN_LENGTH } from '../services/authApi';
+import AuthCard from '../components/AuthCard';
 import '../styles/auth.css';
 
 const Signup = () => {
@@ -45,24 +46,7 @@ const Signup = () => {
   };
 
   return (
-    <div className="auth-background">
-      <div className="auth-card">
-        <div className="auth-header">
-          <div className="auth-logo">
-            <span className="logo-home">Home</span><span className="logo-base">base</span>
-          </div>
-          <div className="logo-divider" />
-        </div>
-
-        <div
-          className={`error-banner${error ? ' error-banner--visible' : ''}`}
-          role="alert"
-          aria-live="polite"
-        >
-          <span className="error-banner__icon" aria-hidden="true">⚠</span>
-          <span>{error}</span>
-        </div>
-
+    <AuthCard title="Create an account" error={error}>
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
           <div className="form-group">
             <label htmlFor="name">Display name</label>
@@ -119,8 +103,7 @@ const Signup = () => {
         <p className="auth-footer">
           Already have an account?&nbsp;<Link to="/login">Sign in</Link>
         </p>
-      </div>
-    </div>
+    </AuthCard>
   );
 };
 

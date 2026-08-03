@@ -20,8 +20,10 @@ import {
 } from '../../services/adminApi';
 import { useAuth } from '../../context/AuthContext';
 import { formatBytes } from '../../utils/formatBytes';
-import { CloseIcon } from '../Icons';
+import { useFormStatus } from '../../hooks/useFormStatus';
+import Modal from '../Modal';
 import StatusBadge from './StatusBadge';
+import FormStatus from '../FormStatus';
 import ConfirmActionModal from '../ConfirmActionModal';
 
 const STATUSES = ['pending', 'active', 'suspended'];
@@ -41,7 +43,7 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
 
   const [mode, setMode]   = useState('idle');
   const [draft, setDraft] = useState(initialUser.status);
-  const [status, setStatus] = useState({ type: null, text: '' });
+  const { status, setSuccess, setError: setStatusError, clear: clearStatus } = useFormStatus();
 
   // Support actions. One pending-action key drives a single ConfirmActionModal
   // rather than three near-identical dialogs.
@@ -73,24 +75,24 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
 
   const handleStartChange = () => {
     setDraft(user.status);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     setMode('choosing');
   };
 
   const handleConfirm = async () => {
     setMode('saving');
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       const updated = await setUserStatus(user.id, draft);
       // trust the response, not the draft
       setUser((u) => ({ ...u, status: updated.status }));
       setMode('done');
-      setStatus({ type: 'success', text: `Status updated to ${updated.status}.` });
+      setSuccess(`Status updated to ${updated.status}.`);
       onChanged?.();
     } catch (err) {
       // back to choosing with the draft preserved, so they can retry or cancel
       setMode('choosing');
-      setStatus({ type: 'error', text: err.message ?? 'Could not update this account.' });
+      setStatusError(err.message ?? 'Could not update this account.');
     }
   };
 
@@ -111,7 +113,7 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
         return;
       }
       closeAction();
-      setStatus({ type: 'success', text: successText });
+      setSuccess(successText);
     } catch (err) {
       // Dialog stays open with the server's reason, matching how the status
       // change and the pending-queue activation both handle failure.
@@ -201,23 +203,16 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
     // overlay's onClick and dismiss this modal too. PreviewModal stacks
     // ShareModal the same way.
     <>
-    {/* dismissal suppressed while saving, so a stray backdrop click can't
-        unmount this component with a request in flight */}
-    <div className="modal-overlay" onClick={saving ? undefined : onClose}>
-      <div className="modal-card modal-card--wide" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-card__header">
-          <span className="modal-title">{user.displayName}</span>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="Close"
-          >
-            <CloseIcon />
-          </button>
-        </div>
-
+    {/* dismissal suppressed while saving, so neither a stray backdrop click nor
+        Escape can unmount this component with a request in flight */}
+    <Modal
+      title={user.displayName}
+      onClose={onClose}
+      wide
+      showClose
+      truncateTitle
+      dismissible={!saving}
+    >
         <p className="admin-detail__email">{user.email}</p>
 
         {loadError && <p className="modal-text modal-text--error">{loadError}</p>}
@@ -254,7 +249,7 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
                 disabled={saving}
                 onChange={(e) => {
                   setDraft(e.target.value);
-                  setStatus({ type: null, text: '' });
+                  clearStatus();
                 }}
                 aria-label="New account status"
               >
@@ -274,7 +269,7 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
               <button
                 type="button"
                 className="modal-button modal-button--ghost"
-                onClick={() => { setMode('idle'); setStatus({ type: null, text: '' }); }}
+                onClick={() => { setMode('idle'); clearStatus(); }}
                 disabled={saving}
               >
                 Cancel
@@ -339,11 +334,8 @@ const UserDetailModal = ({ initialUser, onClose, onChanged }) => {
               as two separate problems. */}
         </div>
 
-        {status.text && (
-          <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-        )}
-      </div>
-    </div>
+        <FormStatus status={status} />
+    </Modal>
 
     {dialog && (
       <ConfirmActionModal

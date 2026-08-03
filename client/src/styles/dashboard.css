@@ -3,7 +3,7 @@
    ============================================================ */
 
 .dashboard {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--color-bg);
   display: flex;
   flex-direction: column;
@@ -207,8 +207,11 @@
   transition: all 0.25s ease;
 }
 
+/* Generous rather than snug: server messages (password policy, breach check)
+   run long, and overflow:hidden above silently truncated them mid-sentence.
+   The open animation just eases over a larger range, which reads as snappier. */
 .dashboard-error--visible {
-  max-height: 80px;
+  max-height: 20em;
   opacity: 1;
   padding: 12px 14px;
   margin-bottom: 20px;
@@ -309,8 +312,8 @@
   height: 26px;
   border-radius: 6px;
   border: none;
-  background: rgba(255, 255, 255, 0.9);
-  color: #6b7280;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
@@ -319,6 +322,16 @@
 .file-tile-wrap:hover .file-tile__menu-trigger,
 .file-tile__menu-trigger:focus-visible {
   opacity: 1;
+}
+
+/* Reveal-on-hover hides this entirely on touch, where there is no hover and a
+   tap on the tile fires the tile's own onClick — taking rename, share,
+   download and delete with it. Keyed on the input device rather than a width
+   breakpoint so touch laptops are covered too. */
+@media (hover: none) {
+  .file-tile__menu-trigger {
+    opacity: 1;
+  }
 }
 
 .file-tile__menu-trigger:hover {
@@ -374,8 +387,13 @@
   inset: 0;
   background: var(--color-overlay);
   display: flex;
-  align-items: center;
+  /* flex-start + margin:auto on the card, NOT align-items:center. A centred
+     flex item that outgrows its container overflows equally in both directions,
+     so the top of a tall modal becomes unreachable even with a scrollbar.
+     margin:auto still centres it whenever it does fit. */
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
   z-index: 100;
   padding: 20px;
 }
@@ -386,6 +404,7 @@
   padding: 28px;
   width: 100%;
   max-width: 360px;
+  margin: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
 }
 
@@ -398,6 +417,23 @@
   font-weight: 700;
   color: var(--color-text);
   margin-bottom: 18px;
+}
+
+/* For headings built from user data — filenames and display names run long and
+   would otherwise widen the card or shove the close button off the edge. */
+.modal-title--truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The card takes tabIndex={-1} so focus can land on it when a dialog has no
+   autoFocus target. That's a programmatic focus, not a keyboard one, so it
+   must not paint a focus ring. */
+.modal-card:focus,
+.preview-card:focus {
+  outline: none;
 }
 
 .modal-card__header {
@@ -449,7 +485,7 @@
 .file-picker {
   display: flex;
   align-items: center;
-  border: 1.5px dashed #d1d5db;
+  border: 1.5px dashed var(--color-input-border);
   border-radius: 8px;
   padding: 16px 14px;
   font-size: 13.5px;
@@ -461,13 +497,13 @@
 
 .file-picker:hover {
   border-color: var(--color-accent);
-  background: #f0f9fd;
+  background: var(--color-accent-soft);
 }
 
 .file-picker--selected {
   border-style: solid;
   border-color: var(--color-accent);
-  background: #f0f9fd;
+  background: var(--color-accent-soft);
   color: var(--color-text);
   font-weight: 500;
 }
@@ -503,12 +539,12 @@
 }
 
 .modal-button--danger {
-  background: #dc2626;
+  background: var(--color-danger-solid);
   color: #fff;
 }
 
 .modal-button--danger:hover {
-  background: #b91c1c;
+  background: var(--color-danger-solid-hover);
 }
 
 .modal-button:disabled {
@@ -565,27 +601,15 @@
   width: 100%;
   max-width: 720px;
   max-height: 85vh;
+  margin: auto;   /* see .modal-overlay — centres without trapping overflow */
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
 }
 
-.preview-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.preview-card__title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* .preview-card__header / __title are gone: the preview now uses the shared
+   .modal-card__header + .modal-title--truncate like every other dialog. They
+   differed only by 4px of margin and 2px of font size. */
 
 .preview-card__body {
   flex: 1;
@@ -629,6 +653,14 @@
   color: var(--color-text-muted);
   font-size: 14px;
   padding: 40px;
+}
+
+/* Shown when the server bounded the list and the grid is a partial view. */
+.dashboard-truncated {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--color-text-subtle);
+  text-align: center;
 }
 
 /* ── Shared files section divider ── */

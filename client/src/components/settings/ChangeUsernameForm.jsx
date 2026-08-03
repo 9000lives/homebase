@@ -5,12 +5,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { changeUsername } from '../../services/authApi';
+import FormStatus from '../FormStatus';
+import { useFormStatus } from '../../hooks/useFormStatus';
 
 const ChangeUsernameForm = ({ onSuccess }) => {
   const { user, refreshUser } = useAuth();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [password, setPassword] = useState('');
-  const [status, setStatus] = useState({ type: null, text: '' });
+  const { status, setSuccess, setError: setStatusError, clear: clearStatus } = useFormStatus();
   const [loading, setLoading] = useState(false);
 
   const trimmedName = displayName.trim();
@@ -20,15 +22,15 @@ const ChangeUsernameForm = ({ onSuccess }) => {
     e.preventDefault();
     if (!canSubmit) return;
     setLoading(true);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       await changeUsername(password, trimmedName);
       await refreshUser();
       setPassword('');
-      setStatus({ type: 'success', text: 'Username updated.' });
+      setSuccess('Username updated.');
       onSuccess?.();
     } catch (err) {
-      setStatus({ type: 'error', text: err.message ?? 'Could not update username. Please try again.' });
+      setStatusError(err.message ?? 'Could not update username. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -42,7 +44,7 @@ const ChangeUsernameForm = ({ onSuccess }) => {
           id="settings-username"
           type="text"
           value={displayName}
-          onChange={(e) => { setDisplayName(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setDisplayName(e.target.value); clearStatus(); }}
           disabled={loading}
         />
       </div>
@@ -52,15 +54,13 @@ const ChangeUsernameForm = ({ onSuccess }) => {
           id="settings-username-password"
           type="password"
           value={password}
-          onChange={(e) => { setPassword(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setPassword(e.target.value); clearStatus(); }}
           autoComplete="current-password"
           disabled={loading}
         />
       </div>
 
-      {status.text && (
-        <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-      )}
+      <FormStatus status={status} />
 
       <div className="modal-actions">
         <button type="submit" className="modal-button modal-button--primary" disabled={loading || !canSubmit}>

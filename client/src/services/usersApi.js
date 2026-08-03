@@ -3,24 +3,7 @@
 //  User lookup for file sharing (search by email/displayName).
 // ============================================================
 
-import { getStoredToken } from './authApi';
-
-// ✏️  Change the port to match your backend
-const USERS_API_URL = 'http://localhost:3000/api/users';
-
-const buildJsonHeaders = () => {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = getStoredToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
-
-const apiFetch = async (url, options = {}) => {
-  const response = await fetch(url, options);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw body;
-  return body;
-};
+import { USERS_API_URL, apiFetch, authHeaders } from './apiClient';
 
 // ── GET /api/users/search?q=<term>&fileId=<optional>&folderId=<optional> ──
 /**
@@ -35,6 +18,6 @@ export const searchUsers = (query, { fileId = null, folderId = null } = {}) => {
   if (folderId) params.append('folderId', folderId);
   return apiFetch(`${USERS_API_URL}/search?${params.toString()}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 };

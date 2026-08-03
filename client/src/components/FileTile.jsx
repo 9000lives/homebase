@@ -22,6 +22,8 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, down
   const kind = isFolder ? null : getFileKind(item.mimeType);
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -30,9 +32,38 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, down
         setMenuOpen(false);
       }
     };
+    // focusout as well as mousedown: pointer users click away, keyboard users
+    // Tab away, and only handling the former left the menu open behind them.
+    const closeOnFocusLeaving = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.relatedTarget)) {
+        setMenuOpen(false);
+      }
+    };
     document.addEventListener('mousedown', closeOnOutsideClick);
-    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+    wrapRef.current?.addEventListener('focusout', closeOnFocusLeaving);
+    const wrap = wrapRef.current;
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      wrap?.removeEventListener('focusout', closeOnFocusLeaving);
+    };
   }, [menuOpen]);
+
+  // Move into the menu on open so a keyboard user lands on Rename rather than
+  // having to Tab past the tile to reach it.
+  useEffect(() => {
+    if (!menuOpen) return;
+    menuRef.current?.querySelector('button')?.focus();
+  }, [menuOpen]);
+
+  // Escape closes and hands focus back to the trigger, so the tab position
+  // isn't lost to the top of the document.
+  const handleMenuKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      setMenuOpen(false);
+      triggerRef.current?.focus();
+    }
+  };
 
   // Auto-close the menu once a download finishes, since the Download item stays
   // open (showing "Zipping…") instead of closing immediately like the other actions.
@@ -55,6 +86,10 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, down
         <span className="file-tile__icon">
           {isFolder ? <FolderIcon /> : <FileIcon kind={kind} />}
         </span>
+        {/* The icon carries folder-vs-file visually, but it's decorative to a
+            screen reader — without this, a folder and a file of the same name
+            are announced identically. */}
+        <span className="sr-only">{isFolder ? 'Folder: ' : 'File: '}</span>
         <span className="file-tile__name">{item.name}</span>
         {/* Search results always carry a `path` array (folder ancestors, empty at
             root) so every result shows where it lives — "Home" for root items,
@@ -71,8 +106,13 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, down
         <>
           <button
             type="button"
+            ref={triggerRef}
             className="file-tile__menu-trigger"
-            aria-label="More actions"
+            /* Named per item: a grid of 40 tiles otherwise announces
+               "More actions, button" 40 times with nothing to tell them apart. */
+            aria-label={`More actions for ${item.name}`}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen((open) => !open);
@@ -82,7 +122,11 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, down
           </button>
 
           {menuOpen && (
-            <div className="file-tile__menu">
+            <div
+              className="file-tile__menu"
+              ref={menuRef}
+              onKeyDown={handleMenuKeyDown}
+            >
               <button
                 type="button"
                 onClick={(e) => {
@@ -136,4 +180,8 @@ const FileTile = ({ item, onClick, onRename, onDelete, onShare, onDownload, down
   );
 };
 
-export default FileTile;
+// Memoised because the dashboard renders up to 200 of these and `query` lives
+// on the page — without this, every keystroke in the search box re-rendered the
+// entire grid. Dashboard useCallbacks the handlers it passes down, which is
+// what makes the memo actually hold.
+export default React.memo(FileTile);

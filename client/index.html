@@ -4,10 +4,17 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>homebase-frontend</title>
+    <!-- Replaced per route by useDocumentTitle; this is what shows before
+         React mounts and in the history entry for a hard navigation. -->
+    <title>Homebase</title>
     <script>
+      // Runs before first paint to avoid a flash of the wrong theme.
+      // This MUST resolve exactly the way ThemeContext does — a stored explicit
+      // choice first, the OS preference otherwise. If the two ever disagree,
+      // the symptom is a visible flash on every load.
       (function () {
-        var theme = localStorage.getItem('homebase_theme') || 'light';
+        var stored = localStorage.getItem('homebase_theme');
+        var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>

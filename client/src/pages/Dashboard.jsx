@@ -21,11 +21,15 @@ import {
 import Header from '../components/Header';
 import SearchBar from '../components/SearchBar';
 import FileTile from '../components/FileTile';
+import LoadingDots from '../components/LoadingDots';
 import NewItemModal from '../components/NewItemModal';
 import RenameModal from '../components/RenameModal';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import PreviewModal from '../components/PreviewModal';
 import ShareModal from '../components/ShareModal';
+import { downloadBlob } from '../utils/downloadBlob';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import '../styles/dashboard.css';
 
 /**
@@ -40,6 +44,7 @@ const sortItems = (items) =>
   });
 
 const Dashboard = () => {
+  useDocumentTitle('Your files');
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const ownerId = user?.id;   // ✏️  comes from your /me response, mapped in AuthContext
@@ -54,6 +59,10 @@ const Dashboard = () => {
   const [mode, setMode] = useState('own');
 
   const [items,   setItems]   = useState([]);
+  // The list endpoints are server-bounded (200 default, 500 max), so `items`
+  // can be a truncated view of the folder. This is the real count, from
+  // X-Total-Count, and drives the notice under the grid.
+  const [itemsTotal, setItemsTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
 
@@ -67,7 +76,7 @@ const Dashboard = () => {
   // `searchResults` holds the personal-tree matches from the backend; the shared
   // section is filtered client-side from the already-loaded `sharedItems`.
   const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [debouncedQuery, flushQuery] = useDebouncedValue(query, 500);
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
 
@@ -89,8 +98,9 @@ const Dashboard = () => {
     try {
       // Fetches GET /api/folders and GET /api/files in parallel,
       // both scoped to ownerId + parentFolderId, then merges them.
-      const data = await fetchDirectoryContents(ownerId, parentFolderId);
+      const { items: data, total } = await fetchDirectoryContents(ownerId, parentFolderId);
       setItems(sortItems(data));
+      setItemsTotal(total);
     } catch (err) {
       setError(err.message ?? 'Could not load files. Please try again.');
     } finally {
@@ -133,14 +143,6 @@ const Dashboard = () => {
   }, [ownerId, loadSharedItems]);
 
   // ── Search ──────────────────────────────────────────────
-  // Debounce the raw input: 500ms after the last keystroke, adopt it as the
-  // query that actually runs. Pressing Enter (see handleSearchSubmit) bypasses
-  // this wait by setting debouncedQuery directly.
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 500);
-    return () => clearTimeout(timer);
-  }, [query]);
-
   // Run the personal-tree search whenever the debounced query settles. The
   // `cancelled` flag drops out-of-order responses when typing quickly.
   useEffect(() => {
@@ -153,37 +155,43 @@ const Dashboard = () => {
     let cancelled = false;
     setSearching(true);
     searchDirectory(term)
-      .then((results) => { if (!cancelled) setSearchResults(sortItems(results)); })
+      .then(({ items: results }) => { if (!cancelled) setSearchResults(sortItems(results)); })
       .catch((err) => { if (!cancelled) console.error('Search failed', err); })
       .finally(() => { if (!cancelled) setSearching(false); });
     return () => { cancelled = true; };
   }, [debouncedQuery]);
 
-  const handleSearchSubmit = () => setDebouncedQuery(query);   // Enter → search now
+  const handleSearchSubmit = () => flushQuery(query);   // Enter → search now
 
-  const clearSearch = () => {
+  // flushQuery('') rather than relying on the debounce: clearing must take
+  // effect at once, and it also cancels a pending timer that would otherwise
+  // land afterwards and re-populate the search from the old term.
+  const clearSearch = useCallback(() => {
     setQuery('');
-    setDebouncedQuery('');
+    flushQuery('');
     setSearchResults([]);
-  };
+  }, [flushQuery]);
 
   // ── Navigation ──────────────────────────────────────────
 
-  const handleTileClick = (item) => {
+  // The three tile handlers and the download are useCallback'd so React.memo on
+  // FileTile actually holds — a fresh closure each render would defeat it and
+  // the whole grid would re-render on every keystroke in the search box.
+  const handleTileClick = useCallback((item) => {
     if (item.type !== 'folder') {
       setPreviewTarget(item);
       return;
     }
     setBreadcrumbs((prev) => [...prev, { id: item._id, name: item.name }]);
     setCurrentFolderId(item._id);
-  };
+  }, []);
 
   // Entry point for a personal search result — the match may live in a folder
   // other than the one currently open, so we can't reuse handleTileClick (which
   // would append to the current breadcrumb trail). Instead we rebuild the trail
   // from the result's own ancestor `path`, then clear the search to reveal the
   // folder. Files just open in the preview, wherever they live.
-  const handleSearchResultClick = (item) => {
+  const handleSearchResultClick = useCallback((item) => {
     if (item.type === 'folder') {
       const trail = (item.path || []).map((p) => ({ id: p._id, name: p.name }));
       setBreadcrumbs([...trail, { id: item._id, name: item.name }]);
@@ -193,12 +201,12 @@ const Dashboard = () => {
     } else {
       setPreviewTarget(item);
     }
-  };
+  }, [clearSearch]);
 
   // Entry point for the "Shared files" section only — drilling deeper once
   // inside a shared folder reuses handleTileClick unchanged, since it never
   // touches `mode`, so `mode` correctly stays 'shared' through any depth.
-  const handleSharedTileClick = (item) => {
+  const handleSharedTileClick = useCallback((item) => {
     if (item.type === 'folder') {
       setMode('shared');
       setBreadcrumbs((prev) => [...prev, { id: item._id, name: item.name }]);
@@ -206,7 +214,7 @@ const Dashboard = () => {
     } else {
       setPreviewTarget(item);
     }
-  };
+  }, []);
 
   const handleBreadcrumbClick = (index) => {
     // index === -1 means "Home" (root) — always exits back to the user's own tree
@@ -297,22 +305,17 @@ const Dashboard = () => {
     }
   };
 
-  const handleDownloadFolder = async (item) => {
+  const handleDownloadFolder = useCallback(async (item) => {
     setDownloadingId(item._id);
     try {
       const blob = await fetchFolderForDownload(item._id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${item.name}.zip`;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${item.name}.zip`);
     } catch (err) {
       setError(err.message ?? 'Could not download folder.');
     } finally {
       setDownloadingId(null);
     }
-  };
+  }, []);
 
   // ── Header actions ──────────────────────────────────────
 
@@ -347,6 +350,10 @@ const Dashboard = () => {
       />
 
       <main className="dashboard-main">
+        {/* The visual design names this page through the logo and breadcrumbs,
+            neither of which is a heading — so the document would otherwise have
+            no h1 at all. Settings and Admin carry visible ones. */}
+        <h1 className="sr-only">Your files</h1>
 
         {/* ── Search ── */}
         {mode === 'own' && (
@@ -385,7 +392,6 @@ const Dashboard = () => {
         <div
           className={`dashboard-error${error ? ' dashboard-error--visible' : ''}`}
           role="alert"
-          aria-live="polite"
         >
           <span aria-hidden="true">⚠</span>
           <span>{error}</span>
@@ -393,11 +399,7 @@ const Dashboard = () => {
 
         {/* ── Content ── */}
         {(loading && !isSearching) || (isSearching && searching) ? (
-          <div className="dashboard-loading">
-            <span className="auth-loading__dot" />
-            <span className="auth-loading__dot" />
-            <span className="auth-loading__dot" />
-          </div>
+          <LoadingDots />
         ) : personalList.length === 0 ? (
           <div className="dashboard-empty">
             <p>{isSearching ? 'No matching files or folders.' : 'This folder is empty.'}</p>
@@ -421,6 +423,14 @@ const Dashboard = () => {
               />
             ))}
           </div>
+        )}
+
+        {/* Only while browsing — a search returns its own bounded result set,
+            and reporting the folder's total against it would be nonsense. */}
+        {!isSearching && itemsTotal > items.length && (
+          <p className="dashboard-truncated">
+            Showing {items.length} of {itemsTotal} items in this folder.
+          </p>
         )}
 
         {mode === 'own' && sharedList.length > 0 && (

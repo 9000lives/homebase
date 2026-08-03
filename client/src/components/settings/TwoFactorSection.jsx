@@ -5,23 +5,25 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { requestEnable2FA, confirmEnable2FA, disable2FA } from '../../services/authApi';
+import FormStatus from '../FormStatus';
+import { useFormStatus } from '../../hooks/useFormStatus';
 
 const EnableTwoFactor = () => {
   const { refreshUser } = useAuth();
   const [step, setStep] = useState('idle'); // 'idle' | 'awaiting-code'
   const [code, setCode] = useState('');
-  const [status, setStatus] = useState({ type: null, text: '' });
+  const { status, setSuccess, setError: setStatusError, clear: clearStatus } = useFormStatus();
   const [loading, setLoading] = useState(false);
 
   const handleSendCode = async () => {
     setLoading(true);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       await requestEnable2FA();
       setStep('awaiting-code');
-      setStatus({ type: 'success', text: 'Verification code sent to your email.' });
+      setSuccess('Verification code sent to your email.');
     } catch (err) {
-      setStatus({ type: 'error', text: err.message ?? 'Could not send a verification code.' });
+      setStatusError(err.message ?? 'Could not send a verification code.');
     } finally {
       setLoading(false);
     }
@@ -31,13 +33,13 @@ const EnableTwoFactor = () => {
     e.preventDefault();
     if (!code) return;
     setLoading(true);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       await confirmEnable2FA(code);
       await refreshUser();
-      setStatus({ type: 'success', text: 'Two-factor authentication is now enabled.' });
+      setSuccess('Two-factor authentication is now enabled.');
     } catch (err) {
-      setStatus({ type: 'error', text: err.message ?? 'Could not verify that code.' });
+      setStatusError(err.message ?? 'Could not verify that code.');
     } finally {
       setLoading(false);
     }
@@ -47,9 +49,7 @@ const EnableTwoFactor = () => {
     return (
       <div className="settings-form">
         <p className="modal-text">Two-factor authentication is currently disabled.</p>
-        {status.text && (
-          <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-        )}
+        <FormStatus status={status} />
         <div className="modal-actions">
           <button type="button" className="modal-button modal-button--primary" onClick={handleSendCode} disabled={loading}>
             {loading ? 'Sending…' : 'Enable 2FA'}
@@ -68,15 +68,13 @@ const EnableTwoFactor = () => {
           type="text"
           inputMode="numeric"
           value={code}
-          onChange={(e) => { setCode(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setCode(e.target.value); clearStatus(); }}
           autoFocus
           disabled={loading}
         />
       </div>
 
-      {status.text && (
-        <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-      )}
+      <FormStatus status={status} />
 
       <div className="modal-actions">
         <button type="button" className="modal-button modal-button--ghost" onClick={handleSendCode} disabled={loading}>
@@ -93,21 +91,21 @@ const EnableTwoFactor = () => {
 const DisableTwoFactor = () => {
   const { refreshUser } = useAuth();
   const [password, setPassword] = useState('');
-  const [status, setStatus] = useState({ type: null, text: '' });
+  const { status, setSuccess, setError: setStatusError, clear: clearStatus } = useFormStatus();
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!password) return;
     setLoading(true);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       await disable2FA(password);
       await refreshUser();
       setPassword('');
-      setStatus({ type: 'success', text: 'Two-factor authentication is now disabled.' });
+      setSuccess('Two-factor authentication is now disabled.');
     } catch (err) {
-      setStatus({ type: 'error', text: err.message ?? 'Could not disable 2FA.' });
+      setStatusError(err.message ?? 'Could not disable 2FA.');
     } finally {
       setLoading(false);
     }
@@ -122,15 +120,13 @@ const DisableTwoFactor = () => {
           id="disable-2fa-password"
           type="password"
           value={password}
-          onChange={(e) => { setPassword(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setPassword(e.target.value); clearStatus(); }}
           autoComplete="current-password"
           disabled={loading}
         />
       </div>
 
-      {status.text && (
-        <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-      )}
+      <FormStatus status={status} />
 
       <div className="modal-actions">
         <button type="submit" className="modal-button modal-button--danger" disabled={loading || !password}>

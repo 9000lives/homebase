@@ -15,6 +15,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { requestPasswordReset, resetPassword, PASSWORD_MIN_LENGTH } from '../services/authApi';
+import AuthCard from '../components/AuthCard';
 import '../styles/auth.css';
 
 const ForgotPassword = () => {
@@ -100,24 +101,11 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="auth-background">
-      <div className="auth-card">
-        <div className="auth-header">
-          <div className="auth-logo">
-            <span className="logo-home">Home</span><span className="logo-base">base</span>
-          </div>
-          <div className="logo-divider" />
-        </div>
-
-        <div
-          className={`error-banner${error ? ' error-banner--visible' : ''}`}
-          role="alert"
-          aria-live="polite"
-        >
-          <span className="error-banner__icon" aria-hidden="true">⚠</span>
-          <span>{error}</span>
-        </div>
-
+    // One heading across both steps — they're two halves of a single task, not
+    // two pages. AuthCard is presentational only: nothing here branches on the
+    // step-1 response, because there is nothing in it to branch on (see the
+    // file header).
+    <AuthCard title="Reset your password" error={error}>
         {!sent ? (
           <form onSubmit={handleRequest} className="auth-form" noValidate>
             <p className="auth-lede">
@@ -229,8 +217,7 @@ const ForgotPassword = () => {
         <p className="auth-footer">
           Remembered it?&nbsp;<Link to="/login">Sign in</Link>
         </p>
-      </div>
-    </div>
+    </AuthCard>
   );
 };
 

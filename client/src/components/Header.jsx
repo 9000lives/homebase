@@ -20,7 +20,10 @@ const Header = ({ onNewItem, onSettings, onLogout, showNewButton = true }) => {
       <div className="dashboard-header__center">
         {showNewButton && (
           <button type="button" className="new-item-button" onClick={onNewItem}>
-            <span className="new-item-button__plus">+</span> New
+            {/* The label needs its own element: dashboard.css hides it below
+                600px via `span:not(.new-item-button__plus)`, which a bare text
+                node can't match. */}
+            <span className="new-item-button__plus">+</span> <span>New</span>
           </button>
         )}
       </div>

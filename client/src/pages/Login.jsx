@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { loginUser, completeLoginWith2FA } from '../services/authApi';
+import AuthCard from '../components/AuthCard';
 import '../styles/auth.css';
 
 const Login = () => {
@@ -81,24 +82,7 @@ const Login = () => {
   };
 
   return (
-    <div className="auth-background">
-      <div className="auth-card">
-        <div className="auth-header">
-          <div className="auth-logo">
-            <span className="logo-home">Home</span><span className="logo-base">base</span>
-          </div>
-          <div className="logo-divider" />
-        </div>
-
-        <div
-          className={`error-banner${error ? ' error-banner--visible' : ''}`}
-          role="alert"
-          aria-live="polite"
-        >
-          <span className="error-banner__icon" aria-hidden="true">⚠</span>
-          <span>{error}</span>
-        </div>
-
+    <AuthCard title="Sign in" error={error}>
         {notice && !error && (
           <p className="auth-notice" role="status">{notice}</p>
         )}
@@ -162,8 +146,7 @@ const Login = () => {
 
             <button
               type="button"
-              className="auth-button"
-              style={{ background: 'transparent', color: 'var(--color-text-muted)', marginTop: 0 }}
+              className="auth-button auth-button--quiet"
               onClick={handleResend}
               disabled={loading}
             >
@@ -178,8 +161,7 @@ const Login = () => {
         <p className="auth-footer auth-footer--tight">
           Don't have an account?&nbsp;<Link to="/signup">Create one</Link>
         </p>
-      </div>
-    </div>
+    </AuthCard>
   );
 };
 

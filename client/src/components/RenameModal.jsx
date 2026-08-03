@@ -4,6 +4,7 @@
 // ============================================================
 
 import React, { useState } from 'react';
+import Modal from './Modal';
 
 /**
  * @param {object}   item     - { _id, name, type: 'folder' | 'file' }
@@ -24,35 +25,35 @@ const RenameModal = ({ item, onClose, onSubmit, loading }) => {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">Rename {item.type === 'folder' ? 'folder' : 'file'}</h2>
+    <Modal
+      title={`Rename ${item.type === 'folder' ? 'folder' : 'file'}`}
+      onClose={onClose}
+      dismissible={!loading}
+    >
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="rename-input">Name</label>
+          <input
+            id="rename-input"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+            required
+            disabled={loading}
+          />
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="rename-input">Name</label>
-            <input
-              id="rename-input"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="modal-actions">
-            <button type="button" className="modal-button modal-button--ghost" onClick={onClose} disabled={loading}>
-              Cancel
-            </button>
-            <button type="submit" className="modal-button modal-button--primary" disabled={loading || !canSubmit}>
-              {loading ? 'Renaming…' : 'Rename'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="modal-actions">
+          <button type="button" className="modal-button modal-button--ghost" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <button type="submit" className="modal-button modal-button--primary" disabled={loading || !canSubmit}>
+            {loading ? 'Renaming…' : 'Rename'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 };
 

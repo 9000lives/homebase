@@ -19,7 +19,19 @@
   --color-danger-border: #fca5a5;
   --color-success: #16a34a;
   --color-input-bg: #fafafa;
+  --color-input-border: #d1d5db;
   --color-overlay: rgba(17, 24, 39, 0.45);
+
+  /* Tinted accent wash behind the file picker's hover/selected states. Distinct
+     from --color-surface-alt: this one has to read as "accent", not "neutral". */
+  --color-accent-soft: #f0f9fd;
+  --color-accent-active: #006b94;
+
+  /* Solid danger buttons carry WHITE text, so unlike --color-danger (which is
+     ink on a background) these can't lighten in dark mode without failing
+     contrast. Deliberately identical in both themes. */
+  --color-danger-solid: #dc2626;
+  --color-danger-solid-hover: #b91c1c;
 
   /* Categorical chart slots for the admin storage donut. The ORDER is the
      colourblind-safety mechanism — validated against --color-surface (#ffffff)
@@ -64,7 +76,21 @@
   --color-danger-border: #7f2d2d;
   --color-success: #4ade80;
   --color-input-bg: #14171c;
+  --color-input-border: #3a4150;
   --color-overlay: rgba(0, 0, 0, 0.65);
+
+  /* A dark wash rather than an inverted tint — the light value (#f0f9fd) is a
+     near-white and would blow a hole in the surface. */
+  --color-accent-soft: #14313d;
+
+  /* Darker than the base accent, same as in light mode, even though dark-mode
+     HOVER goes lighter. The button underneath carries white text, so following
+     the hover direction here would drop it under 3:1 while pressed. */
+  --color-accent-active: #0086b8;
+
+  /* Unchanged from light: see the note there. White text needs the dark red. */
+  --color-danger-solid: #dc2626;
+  --color-danger-solid-hover: #b91c1c;
 
   /* Same six hues re-stepped for the dark surface (#1a1d23) — a selected set,
      not an automatic flip of the light values. All six clear 3:1 here. */

@@ -6,9 +6,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { fetchFilePreview, fetchFileForDownload } from '../services/filesApi';
-import { CloseIcon, ShareIcon } from './Icons';
+import { ShareIcon } from './Icons';
+import Modal from './Modal';
+import LoadingDots from './LoadingDots';
 import ShareModal from './ShareModal';
 import { getFileKind } from '../utils/fileType';
+import { downloadBlob } from '../utils/downloadBlob';
 
 const PREVIEWABLE = new Set(['image', 'pdf', 'text', 'audio']);
 
@@ -67,12 +70,7 @@ const PreviewModal = ({ item, onClose, readOnly = false, onShareChange }) => {
     setDownloading(true);
     try {
       const blob = await fetchFileForDownload(item._id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = item.name;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, item.name);
     } catch (err) {
       setError(err.message ?? 'Could not download file.');
     } finally {
@@ -82,23 +80,15 @@ const PreviewModal = ({ item, onClose, readOnly = false, onShareChange }) => {
 
   return (
     <>
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="preview-card" onClick={(e) => e.stopPropagation()}>
-        <div className="preview-card__header">
-          <span className="preview-card__title" title={item.name}>{item.name}</span>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close preview">
-            <CloseIcon />
-          </button>
-        </div>
-
+    <Modal
+      title={item.name}
+      onClose={onClose}
+      showClose
+      truncateTitle
+      cardClassName="preview-card"
+    >
         <div className="preview-card__body">
-          {loading && (
-            <div className="dashboard-loading">
-              <span className="auth-loading__dot" />
-              <span className="auth-loading__dot" />
-              <span className="auth-loading__dot" />
-            </div>
-          )}
+          {loading && <LoadingDots />}
 
           {!loading && error && <p className="preview-card__fallback">{error}</p>}
 
@@ -108,8 +98,17 @@ const PreviewModal = ({ item, onClose, readOnly = false, onShareChange }) => {
           {!loading && !error && kind === 'pdf' && (
             <iframe src={objectUrl} title={item.name} className="preview-card__pdf" />
           )}
+          {/* tabIndex so a keyboard-only user can scroll a long file: arrow keys
+              scroll the focused element's nearest scrollable ancestor, which is
+              .preview-card__body. The other kinds don't need it — images fit,
+              audio has controls, and an iframe is focusable already.
+              Children stay {textContent}: React-escaped, never innerHTML. */}
           {!loading && !error && kind === 'text' && (
-            <pre className="preview-card__text">{textContent}</pre>
+            <pre
+              className="preview-card__text"
+              tabIndex={0}
+              aria-label={`Contents of ${item.name}`}
+            >{textContent}</pre>
           )}
           {!loading && !error && kind === 'audio' && (
             <audio src={objectUrl} controls className="preview-card__audio" />
@@ -134,8 +133,7 @@ const PreviewModal = ({ item, onClose, readOnly = false, onShareChange }) => {
             {downloading ? 'Downloading…' : 'Download'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
 
     {shareOpen && (
       <ShareModal item={item} onClose={() => setShareOpen(false)} onShareChange={onShareChange} />

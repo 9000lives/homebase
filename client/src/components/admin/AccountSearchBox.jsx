@@ -16,7 +16,7 @@ import UserDetailModal from './UserDetailModal';
  */
 const AccountSearchBox = ({ version, onChanged }) => {
   const [query, setQuery]     = useState('');
-  const debouncedQuery        = useDebouncedValue(query, 500);
+  const [debouncedQuery]      = useDebouncedValue(query, 500);   // no flush needed here
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');

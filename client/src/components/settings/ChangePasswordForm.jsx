@@ -9,12 +9,14 @@ import {
   requestPasswordChangeCode,
   confirmPasswordChangeWithCode,
 } from '../../services/authApi';
+import FormStatus from '../FormStatus';
+import { useFormStatus } from '../../hooks/useFormStatus';
 
 const NoTwoFactorForm = ({ onSuccess }) => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [status, setStatus] = useState({ type: null, text: '' });
+  const { status, setSuccess, setError: setStatusError, clear: clearStatus } = useFormStatus();
   const [loading, setLoading] = useState(false);
 
   const canSubmit =
@@ -26,16 +28,16 @@ const NoTwoFactorForm = ({ onSuccess }) => {
     e.preventDefault();
     if (!canSubmit) return;
     setLoading(true);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       await changePassword(currentPassword, newPassword, confirmNewPassword);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
-      setStatus({ type: 'success', text: 'Password updated.' });
+      setSuccess('Password updated.');
       onSuccess?.();
     } catch (err) {
-      setStatus({ type: 'error', text: err.message ?? 'Could not update password. Please try again.' });
+      setStatusError(err.message ?? 'Could not update password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -49,7 +51,7 @@ const NoTwoFactorForm = ({ onSuccess }) => {
           id="current-password"
           type="password"
           value={currentPassword}
-          onChange={(e) => { setCurrentPassword(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setCurrentPassword(e.target.value); clearStatus(); }}
           autoComplete="current-password"
           disabled={loading}
         />
@@ -60,7 +62,7 @@ const NoTwoFactorForm = ({ onSuccess }) => {
           id="new-password"
           type="password"
           value={newPassword}
-          onChange={(e) => { setNewPassword(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setNewPassword(e.target.value); clearStatus(); }}
           autoComplete="new-password"
           disabled={loading}
         />
@@ -71,15 +73,13 @@ const NoTwoFactorForm = ({ onSuccess }) => {
           id="confirm-new-password"
           type="password"
           value={confirmNewPassword}
-          onChange={(e) => { setConfirmNewPassword(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setConfirmNewPassword(e.target.value); clearStatus(); }}
           autoComplete="new-password"
           disabled={loading}
         />
       </div>
 
-      {status.text && (
-        <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-      )}
+      <FormStatus status={status} />
 
       <div className="modal-actions">
         <button type="submit" className="modal-button modal-button--primary" disabled={loading || !canSubmit}>
@@ -95,18 +95,18 @@ const TwoFactorPasswordForm = ({ onSuccess }) => {
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [status, setStatus] = useState({ type: null, text: '' });
+  const { status, setSuccess, setError: setStatusError, clear: clearStatus } = useFormStatus();
   const [loading, setLoading] = useState(false);
 
   const handleSendCode = async () => {
     setLoading(true);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       await requestPasswordChangeCode();
       setStep('awaiting-code');
-      setStatus({ type: 'success', text: 'Verification code sent to your email.' });
+      setSuccess('Verification code sent to your email.');
     } catch (err) {
-      setStatus({ type: 'error', text: err.message ?? 'Could not send a verification code.' });
+      setStatusError(err.message ?? 'Could not send a verification code.');
     } finally {
       setLoading(false);
     }
@@ -118,17 +118,17 @@ const TwoFactorPasswordForm = ({ onSuccess }) => {
     e.preventDefault();
     if (!canConfirm) return;
     setLoading(true);
-    setStatus({ type: null, text: '' });
+    clearStatus();
     try {
       await confirmPasswordChangeWithCode(code, newPassword, confirmNewPassword);
       setStep('idle');
       setCode('');
       setNewPassword('');
       setConfirmNewPassword('');
-      setStatus({ type: 'success', text: 'Password updated.' });
+      setSuccess('Password updated.');
       onSuccess?.();
     } catch (err) {
-      setStatus({ type: 'error', text: err.message ?? 'Could not update password. Please try again.' });
+      setStatusError(err.message ?? 'Could not update password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -140,9 +140,7 @@ const TwoFactorPasswordForm = ({ onSuccess }) => {
         <p className="modal-text">
           2FA is enabled — changing your password requires a verification code instead of your old password.
         </p>
-        {status.text && (
-          <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-        )}
+        <FormStatus status={status} />
         <div className="modal-actions">
           <button
             type="button"
@@ -166,7 +164,7 @@ const TwoFactorPasswordForm = ({ onSuccess }) => {
           type="text"
           inputMode="numeric"
           value={code}
-          onChange={(e) => { setCode(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setCode(e.target.value); clearStatus(); }}
           autoFocus
           disabled={loading}
         />
@@ -177,7 +175,7 @@ const TwoFactorPasswordForm = ({ onSuccess }) => {
           id="password-2fa-new"
           type="password"
           value={newPassword}
-          onChange={(e) => { setNewPassword(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setNewPassword(e.target.value); clearStatus(); }}
           autoComplete="new-password"
           disabled={loading}
         />
@@ -188,15 +186,13 @@ const TwoFactorPasswordForm = ({ onSuccess }) => {
           id="password-2fa-confirm"
           type="password"
           value={confirmNewPassword}
-          onChange={(e) => { setConfirmNewPassword(e.target.value); setStatus({ type: null, text: '' }); }}
+          onChange={(e) => { setConfirmNewPassword(e.target.value); clearStatus(); }}
           autoComplete="new-password"
           disabled={loading}
         />
       </div>
 
-      {status.text && (
-        <p className={`modal-text modal-text--${status.type}`}>{status.text}</p>
-      )}
+      <FormStatus status={status} />
 
       <div className="modal-actions">
         <button type="button" className="modal-button modal-button--ghost" onClick={handleSendCode} disabled={loading}>

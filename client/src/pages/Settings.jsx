@@ -2,22 +2,35 @@
 //  src/pages/Settings.jsx
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import ChangeUsernameModal from '../components/settings/ChangeUsernameModal';
-import ChangePasswordModal from '../components/settings/ChangePasswordModal';
+import SettingsModal from '../components/settings/SettingsModal';
+import ChangeUsernameForm from '../components/settings/ChangeUsernameForm';
+import ChangePasswordForm from '../components/settings/ChangePasswordForm';
 import TwoFactorSection from '../components/settings/TwoFactorSection';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import '../styles/dashboard.css';
 import '../styles/settings.css';
 
+const CONFIRMATION_DWELL_MS = 900;
+
 const Settings = () => {
+  useDocumentTitle('Settings');
   const navigate = useNavigate();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+
+  const dismissTimer = useRef(null);
+  useEffect(() => () => clearTimeout(dismissTimer.current), []);
+
+  const closeAfterConfirmation = (setOpen) => () => {
+    clearTimeout(dismissTimer.current);
+    dismissTimer.current = setTimeout(() => setOpen(false), CONFIRMATION_DWELL_MS);
+  };
 
   // Gates both the sidebar link and the section below. The /admin route and
   // every admin endpoint enforce this independently — this only hides the door.
@@ -47,7 +60,10 @@ const Settings = () => {
               <div className="theme-toggle-row">
                 <div>
                   <div className="theme-toggle-row__label">Dark mode</div>
-                  <div className="theme-toggle-row__sub">Applies to this browser only.</div>
+                  <div className="theme-toggle-row__sub">
+                    Follows your system setting until you change it here. Applies
+                    to this browser only.
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -64,8 +80,10 @@ const Settings = () => {
 
             <section id="account" className="settings-section">
               <h2 className="settings-section__title">Account</h2>
+              {/* <span>, not <label> — there's no form control here to label,
+                  and a label pointing at nothing is announced as a broken one. */}
               <div className="settings-readonly">
-                <label className="settings-readonly__label">Username</label>
+                <span className="settings-readonly__label">Username</span>
                 <div className="settings-readonly__value">{user?.displayName}</div>
               </div>
               <div className="settings-field-action">
@@ -82,7 +100,7 @@ const Settings = () => {
             <section id="security" className="settings-section">
               <h2 className="settings-section__title">Security</h2>
               <div className="settings-readonly">
-                <label className="settings-readonly__label">Password</label>
+                <span className="settings-readonly__label">Password</span>
                 <div className="settings-readonly__value">••••••••</div>
               </div>
               <div className="settings-field-action">
@@ -121,8 +139,20 @@ const Settings = () => {
         </div>
       </main>
 
-      {usernameModalOpen && <ChangeUsernameModal onClose={() => setUsernameModalOpen(false)} />}
-      {passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)} />}
+      {/* closeAfterConfirmation, not a bare setTimeout: the delay lets the
+          form's "…updated." line be read before the dialog closes over it, and
+          the timer is cancelled on unmount so closing by hand first doesn't
+          leave one pending. */}
+      {usernameModalOpen && (
+        <SettingsModal title="Change username" onClose={() => setUsernameModalOpen(false)}>
+          <ChangeUsernameForm onSuccess={closeAfterConfirmation(setUsernameModalOpen)} />
+        </SettingsModal>
+      )}
+      {passwordModalOpen && (
+        <SettingsModal title="Change password" onClose={() => setPasswordModalOpen(false)}>
+          <ChangePasswordForm onSuccess={closeAfterConfirmation(setPasswordModalOpen)} />
+        </SettingsModal>
+      )}
     </div>
   );
 };

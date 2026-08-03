@@ -2,22 +2,13 @@
    auth.css — Homebase auth page styles
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
+/* The reset, the Inter @import and the app-wide utilities moved to base.css,
+   which main.jsx imports — they were never auth-specific, and living here made
+   them reachable only by accident of bundling. */
 
 /* ── Page wrapper ── */
 .auth-background {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -101,8 +92,10 @@ body {
   padding-bottom: 0;
 }
 
+/* See .dashboard-error--visible: generous so long server messages aren't
+   truncated by the overflow:hidden that drives the open animation. */
 .error-banner--visible {
-  max-height: 100px;
+  max-height: 20em;
   opacity: 1;
   margin-top: 16px;
   margin-bottom: 4px;
@@ -145,7 +138,7 @@ body {
 }
 
 .form-group input {
-  border: 1.5px solid #d1d5db;
+  border: 1.5px solid var(--color-input-border);
   border-radius: 8px;
   padding: 11px 14px;
   font-size: 15px;
@@ -171,7 +164,7 @@ body {
 }
 
 .form-group input.input--error {
-  border-color: #f87171;
+  border-color: var(--color-danger);
 }
 
 /* ── Submit button ── */
@@ -199,7 +192,7 @@ body {
 }
 
 .auth-button:active:not(:disabled) {
-  background: #006b94;
+  background: var(--color-accent-active);
   transform: scale(0.985);
 }
 
@@ -303,7 +296,7 @@ body {
 
 /* ── Loading screen (while auth context initialises) ── */
 .auth-loading {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;

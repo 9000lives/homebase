@@ -13,10 +13,12 @@ import AccountSearchBox from '../components/admin/AccountSearchBox';
 import AnnouncementsBox from '../components/admin/AnnouncementsBox';
 import AuditLogBox from '../components/admin/AuditLogBox';
 import SystemHealthBox from '../components/admin/SystemHealthBox';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import '../styles/dashboard.css';   // modal system, .share-user-tile*, .icon-button
 import '../styles/admin.css';
 
 const Admin = () => {
+  useDocumentTitle('Admin');
   const navigate = useNavigate();
 
   // Bumped by any status mutation so both user lists refetch. This is what

@@ -4,24 +4,7 @@
 //  protect + requireAdmin server-side — a non-admin token gets a 403.
 // ============================================================
 
-import { getStoredToken } from './authApi';
-
-// ✏️  Change the port to match your backend
-const ADMIN_API_URL = 'http://localhost:3000/api/admin';
-
-const buildJsonHeaders = () => {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = getStoredToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
-
-const apiFetch = async (url, options = {}) => {
-  const response = await fetch(url, options);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw body;
-  return body;
-};
+import { ADMIN_API_URL, apiFetch, authHeaders } from './apiClient';
 
 // ── GET /api/admin/stats/storage ──
 /**
@@ -32,7 +15,7 @@ const apiFetch = async (url, options = {}) => {
 export const fetchStorageStats = () =>
   apiFetch(`${ADMIN_API_URL}/stats/storage`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── GET /api/admin/users?status=<status>&q=<term>&limit=<n> ──
@@ -49,7 +32,7 @@ export const fetchAdminUsers = ({ status = null, q = null, limit = null } = {}) 
   if (limit)  params.append('limit', String(limit));
   return apiFetch(`${ADMIN_API_URL}/users?${params.toString()}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 };
 
@@ -63,7 +46,7 @@ export const fetchAdminUsers = ({ status = null, q = null, limit = null } = {}) 
 export const fetchAdminUser = (userId) =>
   apiFetch(`${ADMIN_API_URL}/users/${userId}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── PATCH /api/admin/users/:id/status ──
@@ -76,7 +59,7 @@ export const fetchAdminUser = (userId) =>
 export const setUserStatus = (userId, status) =>
   apiFetch(`${ADMIN_API_URL}/users/${userId}/status`, {
     method:  'PATCH',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ status }),
   });
 
@@ -90,7 +73,7 @@ export const setUserStatus = (userId, status) =>
 export const createAnnouncement = ({ title, body, expiresAt }) =>
   apiFetch(`${ADMIN_API_URL}/announcements`, {
     method:  'POST',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ title, body, expiresAt }),
   });
 
@@ -104,7 +87,7 @@ export const createAnnouncement = ({ title, body, expiresAt }) =>
 export const fetchAnnouncements = () =>
   apiFetch(`${ADMIN_API_URL}/announcements`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── DELETE /api/admin/announcements/:id ──
@@ -116,7 +99,7 @@ export const fetchAnnouncements = () =>
 export const deleteAnnouncement = (announcementId) =>
   apiFetch(`${ADMIN_API_URL}/announcements/${announcementId}`, {
     method:  'DELETE',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── POST /api/admin/users/:id/revoke-sessions ──
@@ -129,7 +112,7 @@ export const deleteAnnouncement = (announcementId) =>
 export const revokeUserSessions = (userId) =>
   apiFetch(`${ADMIN_API_URL}/users/${userId}/revoke-sessions`, {
     method:  'POST',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── POST /api/admin/users/:id/reset-2fa ──
@@ -142,7 +125,7 @@ export const revokeUserSessions = (userId) =>
 export const resetUserTwoFactor = (userId) =>
   apiFetch(`${ADMIN_API_URL}/users/${userId}/reset-2fa`, {
     method:  'POST',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── DELETE /api/admin/users/:id ──
@@ -155,7 +138,7 @@ export const resetUserTwoFactor = (userId) =>
 export const deleteUser = (userId, confirmEmail) =>
   apiFetch(`${ADMIN_API_URL}/users/${userId}`, {
     method:  'DELETE',
-    headers: buildJsonHeaders(),
+    headers: authHeaders(),
     body:    JSON.stringify({ confirmEmail }),
   });
 
@@ -181,7 +164,7 @@ export const fetchAuditLog = ({ event = null, actorId = null, since = null, limi
   if (skip)    params.append('skip', String(skip));
   return apiFetch(`${ADMIN_API_URL}/audit?${params.toString()}`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 };
 
@@ -194,7 +177,7 @@ export const fetchAuditLog = ({ event = null, actorId = null, since = null, limi
 export const fetchAuditEvents = () =>
   apiFetch(`${ADMIN_API_URL}/audit/events`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── GET /api/admin/system/health ──
@@ -211,7 +194,7 @@ export const fetchAuditEvents = () =>
 export const fetchSystemHealth = () =>
   apiFetch(`${ADMIN_API_URL}/system/health`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── GET /api/admin/system/config ──
@@ -226,7 +209,7 @@ export const fetchSystemHealth = () =>
 export const fetchSystemConfig = () =>
   apiFetch(`${ADMIN_API_URL}/system/config`, {
     method:  'GET',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
 
 // ── POST /api/admin/system/test-email ──
@@ -238,5 +221,5 @@ export const fetchSystemConfig = () =>
 export const sendTestEmail = () =>
   apiFetch(`${ADMIN_API_URL}/system/test-email`, {
     method:  'POST',
-    headers: buildJsonHeaders(),
+    headers: authHeaders({ json: false }),
   });
