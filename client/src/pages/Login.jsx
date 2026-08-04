@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { loginUser, completeLoginWith2FA } from '../services/authApi';
-import AuthCard from '../components/AuthCard';
+import AuthLayout from '../components/AuthLayout';
 import '../styles/auth.css';
 
 const Login = () => {
@@ -82,7 +82,7 @@ const Login = () => {
   };
 
   return (
-    <AuthCard title="Sign in" error={error}>
+    <AuthLayout title="Sign in" error={error}>
         {notice && !error && (
           <p className="auth-notice" role="status">{notice}</p>
         )}
@@ -161,7 +161,7 @@ const Login = () => {
         <p className="auth-footer auth-footer--tight">
           Don't have an account?&nbsp;<Link to="/signup">Create one</Link>
         </p>
-    </AuthCard>
+    </AuthLayout>
   );
 };
 

@@ -20,12 +20,32 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
+/* Two <img>s live here; only one shows at a time (see the 600px query
+   below). Sized by height so the artwork's aspect ratio drives width. */
 .dashboard-header__logo {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.8px;
+  display: flex;
+  align-items: center;
   justify-self: start;
   user-select: none;
+}
+
+/* Same padded-artwork caveat as the auth logo (see auth.css): the ink is
+   ~53% of the wordmark's box height and ~68% of the mark's, so these
+   render smaller than they read. 38px of box is ~20px of visible logo,
+   which is about where the old 22px text wordmark sat. */
+.dashboard-header__logo .logo {
+  height: 38px;
+  width: auto;
+  display: block;
+}
+
+/* The wordmark is the first thing to crowd the three-cell header, so the
+   square mark takes over on narrow screens.
+   These selectors have to carry the .dashboard-header__logo prefix: the
+   sizing rule above is (0,2,0), so a bare .logo--narrow-only at (0,1,0)
+   loses the `display` cascade and BOTH logos render at once. */
+.dashboard-header__logo .logo--narrow-only {
+  display: none;
 }
 
 .dashboard-header__center {
@@ -742,8 +762,14 @@
   .dashboard-header {
     padding: 12px 16px;
   }
-  .dashboard-header__logo {
-    font-size: 18px;
+  .dashboard-header__logo .logo {
+    height: 30px;
+  }
+  .dashboard-header__logo .logo--wide-only {
+    display: none;
+  }
+  .dashboard-header__logo .logo--narrow-only {
+    display: block;
   }
   .new-item-button span:not(.new-item-button__plus) {
     display: none;

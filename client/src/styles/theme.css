@@ -27,6 +27,24 @@
   --color-accent-soft: #f0f9fd;
   --color-accent-active: #006b94;
 
+  /* The art half of the auth split. In light mode this is the brand colour
+     itself — the same cyan as the logo — so the sign-in screen leads with
+     the brand rather than a tint of it. Dark mode drops to a deep teal
+     (see the override below); full-saturation cyan against a dark UI reads
+     as a lit panel rather than a surface.
+
+     It is its own token rather than a reuse of --color-accent-soft because
+     that one is a light-mode-light / dark-mode-dark *surface* wash and is
+     still used that way by the dashboard file picker. And not a reuse of
+     --color-accent, which means "interactive" everywhere else in the app;
+     a panel wearing that token would be inheriting a promise it can't keep.
+
+     NOTE for whatever artwork lands in this panel: the two values are far
+     apart, so the art has to work on both — and cyan-on-cyan will vanish
+     in light mode. White or very light line art is the one treatment that
+     holds against both #00a1db and #14313d. */
+  --color-auth-art: #00a1db;
+
   /* Solid danger buttons carry WHITE text, so unlike --color-danger (which is
      ink on a background) these can't lighten in dark mode without failing
      contrast. Deliberately identical in both themes. */
@@ -82,6 +100,11 @@
   /* A dark wash rather than an inverted tint — the light value (#f0f9fd) is a
      near-white and would blow a hole in the surface. */
   --color-accent-soft: #14313d;
+
+  /* A deep teal rather than the brand cyan light mode uses. At full
+     saturation next to a dark UI the panel stops reading as part of the
+     page and starts reading as a light source. */
+  --color-auth-art: #14313d;
 
   /* Darker than the base accent, same as in light mode, even though dark-mode
      HOVER goes lighter. The button underneath carries white text, so following

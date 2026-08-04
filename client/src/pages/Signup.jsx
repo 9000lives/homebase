@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { signupUser, PASSWORD_MIN_LENGTH } from '../services/authApi';
-import AuthCard from '../components/AuthCard';
+import AuthLayout from '../components/AuthLayout';
 import '../styles/auth.css';
 
 const Signup = () => {
@@ -46,7 +46,7 @@ const Signup = () => {
   };
 
   return (
-    <AuthCard title="Create an account" error={error}>
+    <AuthLayout title="Create an account" error={error}>
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
           <div className="form-group">
             <label htmlFor="name">Display name</label>
@@ -103,7 +103,7 @@ const Signup = () => {
         <p className="auth-footer">
           Already have an account?&nbsp;<Link to="/login">Sign in</Link>
         </p>
-    </AuthCard>
+    </AuthLayout>
   );
 };
 

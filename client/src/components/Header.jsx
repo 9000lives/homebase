@@ -3,6 +3,7 @@
 // ============================================================
 
 import React from 'react';
+import Logo from './Logo';
 
 /**
  * @param {Function} onNewItem  - called when "+ New" is clicked
@@ -13,8 +14,15 @@ import React from 'react';
 const Header = ({ onNewItem, onSettings, onLogout, showNewButton = true }) => {
   return (
     <header className="dashboard-header">
+      {/* Both variants render; CSS picks one at the 600px breakpoint. Doing
+          it in CSS rather than JS avoids a resize listener and any chance of
+          a layout shift on first paint.
+          Both keep their alt text: the hidden one is display:none, which
+          takes it out of the accessibility tree entirely, so exactly one
+          "Homebase" is ever announced — and there is one at every width. */}
       <div className="dashboard-header__logo">
-        <span className="logo-home">Home</span><span className="logo-base">base</span>
+        <Logo variant="full" className="logo--wide-only" />
+        <Logo variant="mark" className="logo--narrow-only" />
       </div>
 
       <div className="dashboard-header__center">

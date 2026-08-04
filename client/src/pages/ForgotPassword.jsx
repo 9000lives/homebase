@@ -15,7 +15,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { requestPasswordReset, resetPassword, PASSWORD_MIN_LENGTH } from '../services/authApi';
-import AuthCard from '../components/AuthCard';
+import AuthLayout from '../components/AuthLayout';
 import '../styles/auth.css';
 
 const ForgotPassword = () => {
@@ -102,10 +102,10 @@ const ForgotPassword = () => {
 
   return (
     // One heading across both steps — they're two halves of a single task, not
-    // two pages. AuthCard is presentational only: nothing here branches on the
+    // two pages. AuthLayout is presentational only: nothing here branches on the
     // step-1 response, because there is nothing in it to branch on (see the
     // file header).
-    <AuthCard title="Reset your password" error={error}>
+    <AuthLayout title="Reset your password" error={error}>
         {!sent ? (
           <form onSubmit={handleRequest} className="auth-form" noValidate>
             <p className="auth-lede">
@@ -217,7 +217,7 @@ const ForgotPassword = () => {
         <p className="auth-footer">
           Remembered it?&nbsp;<Link to="/login">Sign in</Link>
         </p>
-    </AuthCard>
+    </AuthLayout>
   );
 };
 

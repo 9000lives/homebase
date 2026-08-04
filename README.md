@@ -27,7 +27,7 @@
 
 Homebase is a self-hosted cloud storage platform designed for personal use among trusted family and friends. Rather than relying on commercial cloud providers, Homebase lets you run your own private file storage server. Access is whitelist-based, every new account starts as `pending` and must be manually approved by an admin before it can be used, keeping the platform closed to anyone outside your circle.
 
-The backend is complete and the frontend is currently in development.
+Both halves are functional: an Express 5 + MongoDB API, and a React 19 frontend covering the dashboard, file and folder actions, sharing, account settings and an admin dashboard.
 
 ---
 
@@ -41,7 +41,8 @@ The backend is complete and the frontend is currently in development.
 | Auth      | JWT + bcryptjs                    |
 | File I/O  | Multer (disk storage)             |
 | Security  | Helmet, express-rate-limit, CORS  |
-| Dev Tools | Nodemon, ESLint                   |
+| Frontend  | React 19, Vite, React Router 7    |
+| Dev Tools | Nodemon, ESLint, oxlint           |
 
 ---
 
@@ -55,7 +56,12 @@ The backend is complete and the frontend is currently in development.
 - ✅ Configurable file type and size restrictions
 - ✅ Folder creation, renaming, moving, and recursive delete
 - ✅ Files and folders are tied to individual user accounts
-- 🚧 Frontend (in progress)
+- ✅ Two-factor authentication over emailed one-time codes, with per-device trust
+- ✅ Self-service password reset that doesn't disclose whether an address is registered
+- ✅ File and folder sharing
+- ✅ React frontend: dashboard, file grid with search, previews, and account settings
+- ✅ Admin dashboard: account approval and search, storage breakdown, announcements, audit log, system health
+- ✅ Light/dark theming that follows the OS until the user chooses otherwise
 
 ---
 
@@ -65,23 +71,28 @@ The backend is complete and the frontend is currently in development.
 homebase/
 ├── server/
 │   ├── server.js               
-│   ├── middleware/
-│   │   ├── authMiddleware.js   
-│   │   └── uploadMiddleware.js 
-│   ├── models/
-│   │   ├── userModel.js
-│   │   ├── fileModel.js
-│   │   └── folderModel.js
+│   ├── config/                 # env validation, mailer, db
+│   ├── middleware/             # auth, uploads, error handling
+│   ├── models/                 # user, file, folder, announcement, audit log
 │   ├── controllers/
-│   │   ├── userController.js
-│   │   └── fileController.js
-│   └── routes/
-│       ├── userRoutes.js
-│       ├── fileRoutes.js
-│       └── folderRoutes.js
+│   ├── routes/
+│   ├── utils/                  # shared auth/validation/logging helpers
+│   ├── tests/                  # security regression suite
+│   └── uploads/                # never served statically
+├── client/                     
+│   ├── public/
+│   │   └── favicon.svg
+│   └── src/
+│       ├── assets/             
+│       ├── components/
+│       ├── context/
+│       ├── hooks/
+│       ├── pages/
+│       ├── services/           # thin wrappers over one apiClient
+│       ├── styles/
+│       └── utils/
 ├── .env                        
-├── package.json
-└── DEVLOG.md
+└── package.json
 ```
 
 ---

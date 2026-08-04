@@ -1,7 +1,11 @@
 // ============================================================
-//  src/components/AuthCard.jsx
-//  The shell shared by Login, Signup and ForgotPassword: the centred
-//  card, the wordmark, and the error banner.
+//  src/components/AuthLayout.jsx
+//  The shell shared by Login, Signup and ForgotPassword: the two-half
+//  split, the brand in the top-left corner, and the error banner.
+//
+//  Left half is the form, right half is decoration (see AuthArt).
+//  Below 900px the right half is dropped from the grid entirely and
+//  the form goes full width.
 //
 //  ErrorBanner is always rendered, never conditionally — the banner
 //  animates open from max-height:0, so it has to be in the DOM before
@@ -12,6 +16,8 @@
 
 import React from 'react';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import AuthArt from './AuthArt';
+import Logo from './Logo';
 
 /**
  * @param {string} error - current error text; '' renders the banner collapsed
@@ -32,34 +38,35 @@ export const ErrorBanner = ({ error }) => (
 /**
  * @param {string} title    - the page's heading. Visually hidden: the design
  *                            names the page through the form itself, but the
- *                            document still needs an h1, and the wordmark names
+ *                            document still needs an h1, and the brand names
  *                            the product rather than the page.
  * @param {string} [error]  - passed straight to ErrorBanner
  */
-const AuthCard = ({ title, error = '', children }) => {
+const AuthLayout = ({ title, error = '', children }) => {
   // The heading and the tab title are the same string on these pages, so all
   // three auth routes get their document title from here rather than each
   // calling the hook themselves.
   useDocumentTitle(title);
 
   return (
-  <div className="auth-background">
-    <div className="auth-card">
-      <div className="auth-header">
-        <div className="auth-logo">
-          <span className="logo-home">Home</span><span className="logo-base">base</span>
+    <div className="auth-layout">
+      <div className="auth-panel">
+        <div className="auth-panel__brand">
+          <Logo variant="full" />
         </div>
-        <div className="logo-divider" />
+
+        <div className="auth-panel__body">
+          <h1 className="sr-only">{title}</h1>
+
+          <ErrorBanner error={error} />
+
+          {children}
+        </div>
       </div>
 
-      <h1 className="sr-only">{title}</h1>
-
-      <ErrorBanner error={error} />
-
-      {children}
+      <AuthArt />
     </div>
-  </div>
   );
 };
 
-export default AuthCard;
+export default AuthLayout;

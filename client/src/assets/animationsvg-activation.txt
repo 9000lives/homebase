@@ -1,0 +1,6 @@
+It's a 2-line activation, not zero-touch
+
+In client/src/components/AuthArt.jsx:
+
+import cabinetAnimation from '../assets/cabinet-animation.svg';   // uncomment
+const ART_SRC = cabinetAnimation;                                  // was null
