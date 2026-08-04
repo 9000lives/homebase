@@ -907,6 +907,9 @@ test('every admin endpoint rejects anonymous, pre-auth and non-admin callers', a
         ['GET', '/admin/announcements'],
         ['POST', '/admin/announcements'],
         ['DELETE', '/admin/announcements/000000000000000000000000'],
+        ['GET', '/admin/feedback'],
+        ['PATCH', '/admin/feedback/000000000000000000000000/status'],
+        ['DELETE', '/admin/feedback/000000000000000000000000'],
         ['GET', '/admin/audit'],
         ['GET', '/admin/audit/events'],
         ['GET', '/admin/system/health'],
@@ -930,6 +933,7 @@ test('every admin endpoint rejects anonymous, pre-auth and non-admin callers', a
 test('admin read endpoints answer for an admin', async () => {
     for (const p of [
         '/admin/announcements',
+        '/admin/feedback',
         '/admin/audit',
         '/admin/audit/events',
         '/admin/system/health',
@@ -1042,6 +1046,272 @@ test('announcements require an approved account', async () => {
     // Same 403 protect gives every other member route — the audience for an
     // announcement is exactly the set of accounts that may use the app.
     assert.equal((await api('GET', '/announcements', { token: r.body.token })).status, 403)
+})
+
+// ── Request body normalisation ────────────────────────────────────────────
+//
+// Express 5 leaves req.body undefined when no parser matched, where Express 4
+// gave {}. Every controller still reads req.body directly, so a write sent with
+// no body threw a TypeError and returned a 500 instead of the 400 its own
+// validation would have produced. server.js normalises it back to {}.
+test('a write sent with no body is a validation error, never a 500', async () => {
+    const victim = await makeUser('no-body@homebase.test')
+
+    const writes = [
+        ['POST', '/users/login'],
+        ['POST', '/folders/create'],
+        ['PATCH', `/admin/users/${victim.id}/status`],
+        ['DELETE', `/admin/users/${victim.id}`],
+        ['POST', '/feedback'],
+        ['POST', '/admin/announcements']
+    ]
+
+    for (const [method, p] of writes) {
+        const r = await api(method, p, { token: alice.token })
+        assert.ok(
+            r.status >= 400 && r.status < 500,
+            `${method} ${p} with no body must be a 4xx, got ${r.status}: ${JSON.stringify(r.body)}`
+        )
+    }
+})
+
+// ── Feedback ──────────────────────────────────────────────────────────────
+//
+// Feedback runs the opposite way to announcements: members write, one admin
+// reads. The controls that matter are therefore mirrored too — the message is
+// member-authored text reaching a privileged reader, and the read side must be
+// unreachable from a member session.
+
+const submitFeedback = (token, body) => api('POST', '/feedback', { token, body })
+
+test('a member can submit feedback and only an admin can read it', async () => {
+    const sender = await makeUser('feedback-sender@homebase.test')
+
+    const sent = await submitFeedback(sender.token, {
+        type: 'bug',
+        message: 'Uploading a folder of photos stalls at about forty files.'
+    })
+    assert.equal(sent.status, 201, JSON.stringify(sent.body))
+    assert.ok(sent.body.id, 'the submit response must identify the row')
+    assert.equal(sent.body.message, undefined, 'the submit response must not echo the message')
+    assert.equal(sent.body.status, undefined, 'the submit response must not expose the triage state')
+
+    // No member read path exists at all — not a guarded one. A 404 here is the
+    // assertion: it proves the route is absent rather than merely protected,
+    // which is what makes cross-member disclosure structurally impossible.
+    assert.equal((await api('GET', '/feedback', { token: sender.token })).status, 404)
+    assert.equal((await api('GET', `/feedback/${sent.body.id}`, { token: sender.token })).status, 404)
+
+    // The admin surface is closed to them too.
+    assert.equal((await api('GET', '/admin/feedback', { token: sender.token })).status, 403)
+
+    const list = await api('GET', '/admin/feedback', { token: alice.token })
+    assert.equal(list.status, 200)
+    assert.equal(typeof list.body.total, 'number')
+    assert.equal(typeof list.body.newCount, 'number')
+    assert.ok(Array.isArray(list.body.rows), 'rows must be an array')
+    assert.ok(list.headers.get('x-total-count') !== null)
+
+    const row = list.body.rows.find((r) => r.id === sent.body.id)
+    assert.ok(row, 'the submitted row must appear in the admin list')
+    assert.equal(row.status, 'new')
+    assert.equal(row.submitter.email, sender.email, 'the submitter snapshot must survive to the admin')
+    assert.equal(row.submitter.deleted, false)
+})
+
+test('feedback rejects an unknown type, a missing message and an over-long one', async () => {
+    const sender = await makeUser('feedback-validation@homebase.test')
+
+    const cases = [
+        [{ type: 'spam', message: 'hello' }, 'an unknown type'],
+        [{ message: 'hello' }, 'a missing type'],
+        [{ type: 'bug' }, 'a missing message'],
+        [{ type: 'bug', message: '   ' }, 'a whitespace-only message'],
+        [{ type: 'bug', message: 42 }, 'a non-string message'],
+        [{ type: 'bug', message: 'x'.repeat(1001) }, 'an over-long message'],
+        // The operator-injection shape. A non-primitive can never be
+        // includes-equal to an enum string, so this must be a clean 400 —
+        // never a 500, and never a stored row.
+        [{ type: { $ne: null }, message: 'hello' }, 'an operator in place of the type']
+    ]
+
+    for (const [body, label] of cases) {
+        const r = await submitFeedback(sender.token, body)
+        assert.equal(r.status, 400, `${label} must be rejected: ${JSON.stringify(r.body)}`)
+    }
+})
+
+test('feedback cannot be filed under someone else\'s name or pre-marked resolved', async () => {
+    // The mass-assignment regression. Identity and triage state come from the
+    // session and the schema default; nothing in the body may reach either.
+    const sent = await submitFeedback(bob.token, {
+        type: 'other',
+        message: 'Filed with a body that tries to impersonate the admin.',
+        submittedBy: alice.id,
+        submitterName: 'Alice',
+        submitterEmail: alice.email,
+        status: 'resolved'
+    })
+    assert.equal(sent.status, 201)
+
+    const list = await api('GET', '/admin/feedback', { token: alice.token })
+    const row = list.body.rows.find((r) => r.id === sent.body.id)
+
+    assert.ok(row)
+    assert.equal(row.submitter.id, bob.id, 'the submitter must come from the session')
+    assert.equal(row.submitter.email, bob.email, 'the email must come from the session')
+    assert.notEqual(row.submitter.email, alice.email)
+    assert.equal(row.status, 'new', 'a member must not be able to set the triage state')
+})
+
+test('feedback requires an approved account', async () => {
+    const r = await api('POST', '/users/', {
+        body: { name: 'Unapproved', email: 'unapproved-feedback@homebase.test', password: PASSWORD }
+    })
+    assert.equal(r.status, 201)
+    // Same 403 protect gives every other member route — a pending account has
+    // not been let into the platform yet, so it cannot write into it either.
+    assert.equal(
+        (await submitFeedback(r.body.token, { type: 'help', message: 'Let me in?' })).status,
+        403
+    )
+})
+
+test('an admin moves feedback through the triage workflow', async () => {
+    const sender = await makeUser('feedback-triage@homebase.test')
+    const sent = await submitFeedback(sender.token, {
+        type: 'feature',
+        message: 'Read-only shared folders would be useful.'
+    })
+    assert.equal(sent.status, 201)
+
+    const path = `/admin/feedback/${sent.body.id}/status`
+
+    for (const status of ['in_progress', 'resolved', 'dismissed', 'new']) {
+        const r = await api('PATCH', path, { token: alice.token, body: { status } })
+        assert.equal(r.status, 200, `${status}: ${JSON.stringify(r.body)}`)
+        assert.equal(r.body.status, status)
+    }
+
+    assert.equal(
+        (await api('PATCH', path, { token: alice.token, body: { status: 'nonsense' } })).status,
+        400
+    )
+    assert.equal(
+        (await api('PATCH', path, { token: alice.token, body: { status: { $ne: null } } })).status,
+        400
+    )
+
+    // requireObjectId runs before the query, so a malformed id is a clean 400
+    // rather than a CastError surfacing as a 500.
+    assert.equal(
+        (await api('PATCH', '/admin/feedback/not-an-id/status', {
+            token: alice.token, body: { status: 'new' }
+        })).status,
+        400
+    )
+    assert.equal(
+        (await api('PATCH', '/admin/feedback/000000000000000000000000/status', {
+            token: alice.token, body: { status: 'new' }
+        })).status,
+        404
+    )
+})
+
+test('the feedback list filters by type and by status independently', async () => {
+    const sender = await makeUser('feedback-filters@homebase.test')
+
+    const bug = await submitFeedback(sender.token, { type: 'bug', message: 'A filterable bug.' })
+    const help = await submitFeedback(sender.token, { type: 'help', message: 'A filterable question.' })
+    assert.equal(bug.status, 201)
+    assert.equal(help.status, 201)
+
+    await api('PATCH', `/admin/feedback/${help.body.id}/status`, {
+        token: alice.token, body: { status: 'resolved' }
+    })
+
+    const byType = await api('GET', '/admin/feedback?type=bug', { token: alice.token })
+    assert.equal(byType.status, 200)
+    assert.ok(byType.body.rows.every((r) => r.type === 'bug'), 'the type filter must exclude other types')
+    assert.ok(byType.body.rows.some((r) => r.id === bug.body.id))
+
+    const byStatus = await api('GET', '/admin/feedback?status=resolved', { token: alice.token })
+    assert.equal(byStatus.status, 200)
+    assert.ok(byStatus.body.rows.every((r) => r.status === 'resolved'))
+    assert.ok(byStatus.body.rows.some((r) => r.id === help.body.id))
+    assert.ok(!byStatus.body.rows.some((r) => r.id === bug.body.id))
+
+    const both = await api('GET', '/admin/feedback?type=help&status=resolved', { token: alice.token })
+    assert.equal(both.status, 200)
+    assert.ok(both.body.rows.every((r) => r.type === 'help' && r.status === 'resolved'))
+
+    // The unhandled count answers "how much is waiting for me", so narrowing
+    // the list must not move it.
+    const unfiltered = await api('GET', '/admin/feedback', { token: alice.token })
+    assert.equal(both.body.newCount, unfiltered.body.newCount, 'newCount must ignore the filters')
+
+    assert.equal((await api('GET', '/admin/feedback?type=nope', { token: alice.token })).status, 400)
+    assert.equal((await api('GET', '/admin/feedback?status=nope', { token: alice.token })).status, 400)
+})
+
+test('the feedback list is bounded regardless of what the client asks for', async () => {
+    const r = await api('GET', '/admin/feedback?limit=999999', { token: alice.token })
+    assert.equal(r.status, 200)
+    assert.ok(r.body.limit <= 500, 'the server-side bound must apply')
+    assert.ok(r.body.rows.length <= r.body.limit)
+})
+
+test('an admin can delete feedback and it stays deleted', async () => {
+    const sender = await makeUser('feedback-delete@homebase.test')
+    const sent = await submitFeedback(sender.token, { type: 'other', message: 'Delete me.' })
+    assert.equal(sent.status, 201)
+
+    const path = `/admin/feedback/${sent.body.id}`
+    assert.equal((await api('DELETE', path, { token: alice.token })).status, 200)
+    assert.equal((await api('DELETE', path, { token: alice.token })).status, 404)
+
+    const list = await api('GET', '/admin/feedback?limit=500', { token: alice.token })
+    assert.ok(!list.body.rows.some((r) => r.id === sent.body.id), 'a deleted row must not come back')
+})
+
+test('a deleted submitter keeps their snapshot and is flagged as gone', async () => {
+    const doomed = await makeUser('feedback-doomed@homebase.test')
+    const sent = await submitFeedback(doomed.token, {
+        type: 'account', message: 'Filed shortly before the account was removed.'
+    })
+    assert.equal(sent.status, 201)
+
+    const removal = await api('DELETE', `/admin/users/${doomed.id}`, {
+        token: alice.token, body: { confirmEmail: doomed.email }
+    })
+    assert.equal(removal.status, 200, JSON.stringify(removal.body))
+
+    const list = await api('GET', '/admin/feedback?limit=500', { token: alice.token })
+    const row = list.body.rows.find((r) => r.id === sent.body.id)
+
+    // The whole reason the row snapshots the identity rather than populating it.
+    assert.ok(row, 'deleting the submitter must not delete their feedback')
+    assert.equal(row.submitter.email, doomed.email, 'the snapshot must outlive the account')
+    assert.equal(row.submitter.deleted, true, 'and the row must say the account is gone')
+})
+
+test('the feedback enums are the lists the client mirrors', () => {
+    const Feedback = require('../models/feedbackModel')
+
+    assert.deepEqual(
+        Feedback.schema.path('type').enumValues,
+        ['feature', 'bug', 'help', 'account', 'other'],
+        'client/src/utils/feedbackTypes.js mirrors this list — change both together'
+    )
+    assert.deepEqual(
+        Feedback.schema.path('status').enumValues,
+        ['new', 'in_progress', 'resolved', 'dismissed'],
+        'client/src/utils/feedbackTypes.js mirrors this list — change both together'
+    )
+    assert.equal(
+        Feedback.MAX_MESSAGE_LENGTH, 1000,
+        'client/src/utils/feedbackTypes.js mirrors this number — change both together'
+    )
 })
 
 // ── Account support actions ───────────────────────────────────────────────

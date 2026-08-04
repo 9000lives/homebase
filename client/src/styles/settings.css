@@ -198,6 +198,68 @@
   transform: translateX(20px);
 }
 
+/* ── Feedback form controls ──
+   .form-group in auth.css styles `input` and nothing else — it has never had a
+   select or a textarea. These are deliberate private copies of .admin-select
+   and .announcement-form__body rather than shared rules: those live in
+   admin.css, which this page doesn't import, and tuning the admin dashboard
+   must not move the settings form. Same reasoning as .admin-list copying
+   .share-results.
+
+   Sized to match auth.css's `.form-group input` (11px/14px padding, 15px text),
+   NOT .admin-select's tighter 10px/14px — that one is tuned for the denser
+   admin boxes, and a verbatim copy would sit visibly small next to the inputs
+   on this page. */
+.settings-select,
+.settings-textarea {
+  border: 1.5px solid var(--color-input-border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-input-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  outline: none;
+  width: 100%;
+}
+
+.settings-select:focus,
+.settings-textarea:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(0, 161, 219, 0.13);
+  background: var(--color-surface);
+}
+
+.settings-select {
+  cursor: pointer;
+}
+
+/* Without color-scheme the native option popup renders white-on-white in dark
+   mode — the list is unreadable, not merely off-palette. Scoped so light-theme
+   controls are untouched. .admin-select carries the same rule for the same
+   reason; each stylesheet needs its own copy. */
+:root[data-theme='dark'] .settings-select {
+  color-scheme: dark;
+}
+
+.settings-textarea {
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 120px;
+}
+
+.settings-textarea::placeholder {
+  color: var(--color-text-subtle);
+}
+
+/* flex-end works because .form-group is a column flex container. */
+.settings-form__count {
+  align-self: flex-end;
+  font-size: 11px;
+  color: var(--color-text-subtle);
+}
+
 /* ── Responsive ── */
 @media (max-width: 600px) {
   .settings-header {

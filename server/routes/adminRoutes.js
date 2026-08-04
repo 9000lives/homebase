@@ -18,6 +18,12 @@ const {
 } = require('../controllers/announcementController')
 
 const {
+    listFeedback,         //GET    every feedback row, newest first
+    updateFeedbackStatus, //PATCH  move one through the triage workflow
+    deleteFeedback        //DELETE remove one
+} = require('../controllers/feedbackController')
+
+const {
     listAuditLog,    //GET filtered, reverse-chronological audit trail
     listAuditEvents  //GET event names present, for the filter control
 } = require('../controllers/adminAuditController')
@@ -56,6 +62,15 @@ router.delete('/users/:id', deleteUser)
 router.post('/announcements', createAnnouncement)
 router.get('/announcements', listAnnouncements)
 router.delete('/announcements/:id', deleteAnnouncement)
+
+// Feedback. Members submit at POST /api/feedback (feedbackRoutes.js); reading
+// and triaging are admin actions and live here. Same ordering rule as above: a
+// bare '/feedback/<word>' literal added later must go above '/feedback/:id'.
+// The two param routes below are safe as written — one carries a further
+// literal segment, the other a distinct method.
+router.get('/feedback', listFeedback)
+router.patch('/feedback/:id/status', updateFeedbackStatus)
+router.delete('/feedback/:id', deleteFeedback)
 
 // Audit trail. '/audit/events' is a literal and must stay above any future
 // '/audit/:id'.

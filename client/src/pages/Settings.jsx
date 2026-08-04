@@ -10,6 +10,7 @@ import SettingsModal from '../components/settings/SettingsModal';
 import ChangeUsernameForm from '../components/settings/ChangeUsernameForm';
 import ChangePasswordForm from '../components/settings/ChangePasswordForm';
 import TwoFactorSection from '../components/settings/TwoFactorSection';
+import FeedbackForm from '../components/settings/FeedbackForm';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import '../styles/dashboard.css';
 import '../styles/settings.css';
@@ -51,6 +52,9 @@ const Settings = () => {
             <a href="#appearance" className="settings-sidebar__link">Appearance</a>
             <a href="#account" className="settings-sidebar__link">Account</a>
             <a href="#security" className="settings-sidebar__link">Security</a>
+            {/* This link and the section's id must move together — an anchor
+                pointing at a missing id is a dead scroll with no error. */}
+            <a href="#feedback" className="settings-sidebar__link">Feedback</a>
             {isAdmin && <a href="#admin" className="settings-sidebar__link">Admin</a>}
           </nav>
 
@@ -115,6 +119,19 @@ const Settings = () => {
 
               <h3 className="settings-section__subtitle">Two-factor authentication</h3>
               <TwoFactorSection />
+            </section>
+
+            {/* Rendered inline, like TwoFactorSection above — SettingsModal
+                exists for forms reached by a "Change …" button, and a feedback
+                box people are meant to notice belongs on the page itself. */}
+            <section id="feedback" className="settings-section">
+              <h2 className="settings-section__title">Feedback</h2>
+              <p className="modal-text">
+                Report a problem, ask for help, or suggest something. This goes
+                straight to the admin — there&apos;s no reply here, so they&apos;ll
+                get back to you by email.
+              </p>
+              <FeedbackForm />
             </section>
 
             {isAdmin && (

@@ -125,6 +125,25 @@ app.use(cors(corsOptions))
 // multipart and are bounded separately by Multer.
 app.use(express.json({ limit: '100kb' }))
 
+// Express 5 leaves req.body UNDEFINED when no parser matched — a request with
+// no body, or one with no Content-Type. Express 4 handed over `{}`, and every
+// controller here still reads req.body on that assumption (34 call sites at the
+// time of writing, both `req.body.x` and `const { x } = req.body`).
+//
+// Without this, `DELETE /api/admin/users/:id` sent with no body threw
+// "Cannot read properties of undefined (reading 'confirmEmail')" and returned a
+// 500 where the typed-email check should have produced a clean 400 — a caller
+// omitting the confirmation got an unexpected-error response instead of being
+// told what was missing. Every other write endpoint had the same latent shape.
+//
+// Normalising here rather than guarding each call site: 34 `?.` operators are
+// 34 chances to miss one, and a validator reading `undefined` instead of a
+// missing property produces exactly the same 400 it would for an empty object.
+app.use((req, res, next) => {
+    if (req.body === undefined) req.body = {}
+    next()
+})
+
 // Backstop limiter for every route, including any added without their own.
 app.use(globalLimiter)
 
@@ -135,6 +154,11 @@ app.use('/api/folders', require('./routes/folderRoutes'))
 // Reading announcements is a member action, so it mounts as its own resource.
 // Creating and retracting them is an admin action and lives under /api/admin.
 app.use('/api/announcements', require('./routes/announcementRoutes'))
+
+// Sending feedback is a member action, so it mounts as its own resource — and
+// carries only a POST. Reading and triaging it is an admin action and lives
+// under /api/admin.
+app.use('/api/feedback', require('./routes/feedbackRoutes'))
 
 // admin dashboard — every route inside is behind protect + requireAdmin
 app.use('/api/admin', require('./routes/adminRoutes'))

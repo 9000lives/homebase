@@ -11,6 +11,7 @@ import StorageBox from '../components/admin/StorageBox';
 import PendingAccountsBox from '../components/admin/PendingAccountsBox';
 import AccountSearchBox from '../components/admin/AccountSearchBox';
 import AnnouncementsBox from '../components/admin/AnnouncementsBox';
+import FeedbackBox from '../components/admin/FeedbackBox';
 import AuditLogBox from '../components/admin/AuditLogBox';
 import SystemHealthBox from '../components/admin/SystemHealthBox';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -48,6 +49,12 @@ const Admin = () => {
               affect each other, so neither needs to refetch on the other's
               change — same reasoning as StorageBox above. */}
           <AnnouncementsBox />
+          {/* Also no version/onChanged, but for a slightly different reason:
+              this box DOES mutate (triage, delete), it just mutates nothing
+              outside itself. A feedback row is not invalidated by an account
+              status change, and changing one changes no account — so it keeps
+              its list in sync locally instead. */}
+          <FeedbackBox />
           {/* Both append-only / read-only, so neither participates in
               dataVersion either. */}
           <AuditLogBox />

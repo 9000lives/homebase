@@ -86,6 +86,23 @@ const userSearchLimiter = make({
     keyGenerator: byUserOrIp
 })
 
+// Member-authored text landing in the admin's triage queue. Uncapped, one
+// member can push thousands of 1000-character rows into the dashboard — a
+// database-growth problem, and more practically a denial of the admin's
+// attention, which is the entire point of that box. It is the same shape of
+// abuse as registration (the other endpoint that fills an admin queue), so it
+// borrows registerLimiter's one-hour window rather than the house 15-minute
+// one: what needs bounding here is sustained volume, not a burst. Keyed by
+// account — the limit is about how much one member may file, not about network
+// origin.
+const feedbackLimiter = make({
+    name: 'feedback',
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: 'Too much feedback sent recently, please try again later.',
+    keyGenerator: byUserOrIp
+})
+
 // Uploads are expensive in disk, CPU and event-loop time. The per-user storage
 // quota bounds total consumption; this bounds the rate of getting there.
 const uploadLimiter = make({
@@ -125,6 +142,7 @@ module.exports = {
     otpRequestLimiter,
     otpVerifyLimiter,
     userSearchLimiter,
+    feedbackLimiter,
     uploadLimiter,
     downloadLimiter,
     testEmailLimiter

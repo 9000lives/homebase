@@ -102,6 +102,61 @@ export const deleteAnnouncement = (announcementId) =>
     headers: authHeaders({ json: false }),
   });
 
+// ── GET /api/admin/feedback?type=&status=&limit=&skip= ──
+/**
+ * Member-submitted feedback, newest first. Both filters are optional and
+ * independent.
+ *
+ * Like the audit log this returns an ENVELOPE, not a bare array — the box needs
+ * two numbers, and apiFetch discards the Response so a header could only ever
+ * carry one. `newCount` is deliberately unfiltered: it answers "how much is
+ * waiting for me", so it must not move when the filters narrow the list.
+ *
+ * Returns: { total, newCount, limit, skip, rows: [{ id, type, message, status,
+ *            createdAt, submitter: { id, displayName, email, deleted } }] }
+ *
+ * `submitter` is a snapshot taken when the message was sent, so it stays
+ * answerable after a rename; `deleted` is live, and true once the account is gone.
+ */
+export const fetchFeedback = ({ type = null, status = null, limit = null, skip = null } = {}) => {
+  const params = new URLSearchParams();
+  if (type)   params.append('type', type);
+  if (status) params.append('status', status);
+  if (limit)  params.append('limit', String(limit));
+  if (skip)   params.append('skip', String(skip));
+  return apiFetch(`${ADMIN_API_URL}/feedback?${params.toString()}`, {
+    method:  'GET',
+    headers: authHeaders({ json: false }),
+  });
+};
+
+// ── PATCH /api/admin/feedback/:id/status ──
+/**
+ * Moves one item through triage. `status` must be 'new' | 'in_progress' |
+ * 'resolved' | 'dismissed'. Any value may follow any other — the server
+ * validates the value, not the transition, so re-opening something closed too
+ * early is allowed.
+ * Returns: the updated row, in the same shape fetchFeedback returns.
+ */
+export const setFeedbackStatus = (feedbackId, status) =>
+  apiFetch(`${ADMIN_API_URL}/feedback/${feedbackId}/status`, {
+    method:  'PATCH',
+    headers: authHeaders(),
+    body:    JSON.stringify({ status }),
+  });
+
+// ── DELETE /api/admin/feedback/:id ──
+/**
+ * Permanently removes one item. The member is not notified and has no history
+ * view, so this is invisible to them.
+ * Returns: { id }
+ */
+export const deleteFeedback = (feedbackId) =>
+  apiFetch(`${ADMIN_API_URL}/feedback/${feedbackId}`, {
+    method:  'DELETE',
+    headers: authHeaders({ json: false }),
+  });
+
 // ── POST /api/admin/users/:id/revoke-sessions ──
 /**
  * Signs an account out of every device and drops its 2FA device trust, without

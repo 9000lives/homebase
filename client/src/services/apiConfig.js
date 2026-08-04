@@ -19,3 +19,4 @@ export const FOLDERS_API_URL       = `${API_ORIGIN}/api/folders`;
 export const USERS_API_URL         = `${API_ORIGIN}/api/users`;
 export const ADMIN_API_URL         = `${API_ORIGIN}/api/admin`;
 export const ANNOUNCEMENTS_API_URL = `${API_ORIGIN}/api/announcements`;
+export const FEEDBACK_API_URL      = `${API_ORIGIN}/api/feedback`;

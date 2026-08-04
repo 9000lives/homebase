@@ -280,6 +280,35 @@
   background: var(--status-suspended-bg);
 }
 
+/* Feedback triage statuses. These reuse the account-status token pairs rather
+   than introducing a fourth: those three are the palette already validated for
+   contrast in both themes, and — per the note above — the status word is always
+   printed inside the pill, so hue only has to separate OPEN from CLOSED, not
+   tell four states apart.
+
+     new / in_progress -> amber   (open, waiting on the admin)
+     resolved          -> green   (closed, acted on)
+     dismissed         -> neutral (closed, no action taken)
+
+   --dismissed uses --color-text, not --color-text-muted: #6b7280 on #f0f4f8
+   measures 4.42:1, just under the threshold, and an 11px bold pill is not
+   large text. */
+.status-badge--new,
+.status-badge--in_progress {
+  color: var(--status-pending-ink);
+  background: var(--status-pending-bg);
+}
+
+.status-badge--resolved {
+  color: var(--status-active-ink);
+  background: var(--status-active-bg);
+}
+
+.status-badge--dismissed {
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+}
+
 /* ── User detail modal ── */
 
 .admin-detail__email {
@@ -530,6 +559,111 @@
   width: 100%;
   margin-top: 12px;
   padding: 9px;
+  font-size: 13px;
+}
+
+/* ── Feedback ── */
+
+.feedback-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.feedback-filters .form-group {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.feedback-box__total-suffix {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* Taller and busier than an .audit-row, so these get a rule between them
+   rather than relying on .admin-list's gap alone. */
+.feedback-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.feedback-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.feedback-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.feedback-row__type {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.feedback-row__when {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--color-text-subtle);
+  white-space: nowrap;
+}
+
+/* Both properties are load-bearing on member-authored text.
+
+   pre-wrap keeps the line breaks the sender typed without ever building markup
+   out of their string — the body is React children, never innerHTML.
+
+   overflow-wrap breaks a 1000-character unbroken token, which has no wrap
+   opportunity of its own. .admin-grid's tracks are 1fr, so one such message
+   would otherwise widen this column and push the whole dashboard sideways. */
+.feedback-row__message {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedback-row__who {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.feedback-row__email {
+  color: var(--color-text-subtle);
+}
+
+.feedback-row__gone {
+  color: var(--color-danger);
+}
+
+.feedback-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* .admin-select is flex: 1, which is right in a filter row and wrong next to a
+   button. .modal-button is flex: 1 for the same reason. */
+.feedback-row__actions .admin-select {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+.feedback-row__delete {
+  flex: 0 0 auto;
+  padding: 6px 12px;
   font-size: 13px;
 }
 

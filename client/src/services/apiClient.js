@@ -21,6 +21,7 @@ export {
   USERS_API_URL,
   ADMIN_API_URL,
   ANNOUNCEMENTS_API_URL,
+  FEEDBACK_API_URL,
 } from './apiConfig';
 
 /**

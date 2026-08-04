@@ -60,7 +60,8 @@ Both halves are functional: an Express 5 + MongoDB API, and a React 19 frontend 
 - ✅ Self-service password reset that doesn't disclose whether an address is registered
 - ✅ File and folder sharing
 - ✅ React frontend: dashboard, file grid with search, previews, and account settings
-- ✅ Admin dashboard: account approval and search, storage breakdown, announcements, audit log, system health
+- ✅ Member feedback: bug reports, feature requests and questions, triaged from the admin dashboard
+- ✅ Admin dashboard: account approval and search, storage breakdown, announcements, feedback, audit log, system health
 - ✅ Light/dark theming that follows the OS until the user chooses otherwise
 
 ---
@@ -73,7 +74,7 @@ homebase/
 │   ├── server.js               
 │   ├── config/                 # env validation, mailer, db
 │   ├── middleware/             # auth, uploads, error handling
-│   ├── models/                 # user, file, folder, announcement, audit log
+│   ├── models/                 # user, file, folder, announcement, feedback, audit log
 │   ├── controllers/
 │   ├── routes/
 │   ├── utils/                  # shared auth/validation/logging helpers
