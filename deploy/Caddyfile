@@ -1,0 +1,145 @@
+# Homebase — Caddy reverse proxy (Windows Server).
+#
+# Serves the built React client and proxies the API from ONE origin. That is a
+# security requirement, not a convenience:
+#
+#   * The API sets crossOriginResourcePolicy: 'same-site'. Serving the client
+#     from a different SITE means every file preview and download is blocked by
+#     the browser even with CORS configured correctly.
+#   * Same origin means the browser never issues a cross-origin request, so the
+#     CORS allow-list stops being load-bearing for normal use.
+#   * Caddy obtains and renews TLS certificates automatically and redirects
+#     HTTP to HTTPS with no configuration. The API turns HSTS on by itself once
+#     NODE_ENV=production, which is only safe because TLS terminates here.
+#
+# Paths use FORWARD slashes. A backslash is an escape character in a Caddyfile,
+# so C:\Homebase\... silently mis-parses.
+#
+# ── Install (elevated PowerShell) ───────────────────────────────────────────
+#   # Caddy conflicts with anything already holding 80/443 — IIS, most often.
+#   Get-Service W3SVC -ErrorAction SilentlyContinue   # if present, stop+disable
+#   netstat -ano | Select-String ":80 |:443 "         # must come back empty
+#
+#   winget install CaddyServer.Caddy
+#   Copy-Item deploy\Caddyfile C:\Caddy\Caddyfile
+#   caddy validate --config C:\Caddy\Caddyfile
+#
+#   New-NetFirewallRule -DisplayName "Caddy HTTP"  -Direction Inbound -Protocol TCP -LocalPort 80  -Action Allow
+#   New-NetFirewallRule -DisplayName "Caddy HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443 -Action Allow
+#
+# Run Caddy as a Windows service with WinSW, the same wrapper the API uses —
+# see deploy/homebase-service.xml. Two Windows-specific details matter:
+#
+#   1. Set XDG_DATA_HOME (e.g. C:\ProgramData\Caddy) for the service. Caddy
+#      stores issued certificates under it, and a service account without a
+#      loaded user profile otherwise writes them somewhere that does not
+#      survive a restart — Caddy then re-issues on every start and hits Let's
+#      Encrypt's duplicate-certificate rate limit (5/week) within a day.
+#   2. Grant that directory write access to the account Caddy runs as.
+#
+# ── The API must not be reachable directly ──────────────────────────────────
+# server.js calls app.listen(PORT) with no host argument, so Node binds
+# 0.0.0.0:3000 — every interface, not just loopback. Reaching :3000 from
+# outside skips TLS, skips HSTS, and skips everything in this file. Nothing
+# here can prevent that, so block it at the firewall:
+#
+#   New-NetFirewallRule -DisplayName "Block Homebase API external" `
+#     -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Block
+#
+# Verify from another machine that https://<host> answers and
+# http://<host>:3000 does not.
+
+homebase.example.com {
+
+	encode zstd gzip
+
+	# ── API ─────────────────────────────────────────────────────────────
+	handle /api/* {
+		# Bounds the request body before it reaches Node. MAX_UPLOAD_BYTES
+		# defaults to 100 MiB (104,857,600 bytes); Caddy reads "MB" as 10^6,
+		# so 120MB sits above it with room for multipart overhead. RAISE THIS
+		# FIRST if MAX_UPLOAD_BYTES is ever raised — otherwise Caddy rejects
+		# the upload and the API's own 413 never gets the chance to fire.
+		request_body {
+			max_size 120MB
+		}
+
+		reverse_proxy 127.0.0.1:3000 {
+			# Uses the public probe added in server.js. It answers 503 when
+			# Mongo is unreachable, so a process that is up but cannot serve
+			# gets taken out of rotation and callers see a clean 502 instead
+			# of requests that hang until a controller fails.
+			health_uri /health
+			health_interval 10s
+			health_timeout 2s
+		}
+	}
+
+	# The probe itself, so an external uptime monitor can reach it.
+	handle /health {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# ── Client ──────────────────────────────────────────────────────────
+	handle {
+		# The built SPA ONLY — never C:/Homebase. Pointing this at the
+		# repository root would publish .env, the upload directory and the
+		# whole server tree as static files. The rule that uploads are never
+		# served through express.static exists for the same reason and is
+		# undone just as completely by a web server rooted one directory too
+		# high.
+		#
+		# The app enforces the other half of this: it refuses to start if
+		# UPLOAD_ROOT resolves to anywhere inside client/, since that is the
+		# directory this line publishes.
+		root * C:/Homebase/client/dist
+
+		# These responses never pass through the API, so helmet does not see
+		# them — Caddy is the only thing that can set headers on the HTML,
+		# JS and CSS. The API's own policy (default-src 'none') is correct for
+		# JSON and would blank the page here, so this is a separate policy for
+		# a different kind of response.
+		#
+		# Each source below is load-bearing:
+		#   'sha256-…'          the inline theme script in index.html, which
+		#                       runs before first paint to avoid a flash of the
+		#                       wrong theme. See the regeneration note below.
+		#   fonts.googleapis    client/src/styles/base.css:10 @imports Inter.
+		#   fonts.gstatic       …and that stylesheet loads the font files from
+		#                       gstatic. Omitting either silently drops the app
+		#                       to a system font rather than erroring.
+		#   blob:               PreviewModal revokes object URLs into an <img>
+		#                       and, for PDFs, an <iframe> — hence frame-src.
+		#   connect-src 'self'  the API is same-origin. If VITE_API_URL is ever
+		#                       pointed at another host, add it here too.
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-ILqYkh2uAYpwehddZzSx95xPG1e2GqLFeoHXaJK6lBM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+			-Server
+		}
+
+		# react-router owns the URL space, so a deep link or a refresh on
+		# /dashboard must return index.html rather than 404.
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# ── Regenerating the script hash ────────────────────────────────────────────
+# The hash above covers the exact bytes of the inline <script> in
+# client/index.html, INCLUDING line endings. It was computed for a CRLF
+# checkout, which is what Git for Windows produces with the default
+# core.autocrlf=true. The same file checked out with LF hashes differently
+# (sha256-MjZoqOyL04uGbzm0zc2XH6iWLPGdnLZ8TBHqegYPpzc=), so verify on the
+# deploy host rather than trusting either value.
+#
+# If the script is ever edited, regenerate — from the BUILT output, elevated
+# PowerShell in C:\Homebase:
+#
+#   node -e "const fs=require('fs'),c=require('crypto');const h=fs.readFileSync('client/dist/index.html','utf8');const m=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/.exec(h);console.log('sha256-'+c.createHash('sha256').update(m[1],'utf8').digest('base64'))"
+#
+# A stale hash fails benignly and quietly: the browser blocks the inline
+# script, the app still works, and the only symptom is a flash of the wrong
+# theme on load. Check the browser console for a CSP violation if that appears.

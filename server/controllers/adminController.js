@@ -12,7 +12,8 @@ const { badRequest, notFound } = require('../utils/httpError')
 const { log, audit, actorFrom } = require('../utils/logger')
 const { revokeAllDevices } = require('../utils/deviceTrust')
 const { clearOtp } = require('../utils/otp')
-const { UPLOAD_ROOT } = require('../middleware/uploadMiddleware')
+const { UPLOAD_ROOT } = require('../config/env')
+const { resolveStoredPath } = require('../utils/fileStorage')
 
 // Read the whitelist straight off the schema so it can never drift from the model
 const ALLOWED_STATUSES = User.schema.path('status').enumValues
@@ -387,9 +388,19 @@ async function removeUserFiles(userId, files) {
     for (let i = 0; i < files.length; i += CONCURRENCY) {
         await Promise.all(
             files.slice(i, i + CONCURRENCY).map(async (file) => {
-                if (!file.storagePath) return
+                const absolutePath = resolveStoredPath(file.storagePath)
+                if (!absolutePath) {
+                    // Covers both a missing value and one that does not land
+                    // inside UPLOAD_ROOT. The per-user directory removal below
+                    // is what actually reclaims the space in that case.
+                    log.error('cannot unlink file during account delete: path does not resolve', {
+                        fileId: file._id.toString(),
+                        storagePath: file.storagePath
+                    })
+                    return
+                }
                 try {
-                    await fsp.unlink(path.resolve(file.storagePath))
+                    await fsp.unlink(absolutePath)
                 } catch (error) {
                     if (error.code !== 'ENOENT') {
                         log.error('failed to unlink file during account delete', {

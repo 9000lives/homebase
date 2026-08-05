@@ -16,3 +16,19 @@ client/dist/
 
 # Logs
 *.log
+
+# WinSW service binary — a per-host download, not source.
+#
+# It has to sit in deploy/ because WinSW locates its configuration by matching
+# its own filename: homebase-service.exe looks for homebase-service.xml beside
+# it. That convention is what puts a ~10MB executable inside a version-
+# controlled directory, and the server's install path is itself a git clone.
+#
+# The .xml IS tracked — it is the configuration and the reason WinSW was chosen
+# over NSSM, which hides the same settings in the registry. Only the binary is
+# ignored, for the same reason as node_modules/: fetch it per host from
+# https://github.com/winsw/winsw/releases rather than trusting a copy in the
+# repository. Ignoring it also means `git clean -fd` during a redeploy skips it
+# instead of deleting the stopped service's own executable.
+deploy/*.exe
+deploy/*.exe.config

@@ -13,7 +13,8 @@ const dotenv = require('dotenv')
 
 // Explicit path so the app behaves identically whether it's started from the
 // repo root (npm start) or from anywhere else.
-dotenv.config({ path: path.join(__dirname, '..', '..', '.env') })
+const REPO_ROOT = path.join(__dirname, '..', '..')
+dotenv.config({ path: path.join(REPO_ROOT, '.env') })
 
 const NODE_ENV = process.env.NODE_ENV || 'development'
 const isProduction = NODE_ENV === 'production'
@@ -106,6 +107,50 @@ if (isProduction && TRUST_PROXY === false) {
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 100 * 1024 * 1024)
 const USER_STORAGE_QUOTA_BYTES = Number(process.env.USER_STORAGE_QUOTA_BYTES || 5 * 1024 * 1024 * 1024)
 
+// Where uploaded bytes live: <UPLOAD_ROOT>/<userId>/<uuid>.<verified-ext>.
+//
+// A RELATIVE value resolves against the repository root rather than the working
+// directory, so `server/uploads` means the same thing however the process was
+// started — matching how this file finds .env. An ABSOLUTE value is taken as
+// given, which is the point of making this configurable: file bytes are the one
+// thing here that grows without bound, and they usually belong on a different
+// volume from the application.
+//
+// The default reproduces the previous hardcoded location exactly, so an
+// existing install that never sets this keeps working untouched.
+const UPLOAD_ROOT = path.resolve(
+    REPO_ROOT,
+    process.env.UPLOAD_ROOT || path.join('server', 'uploads')
+)
+
+// True when `child` is `parent` or sits beneath it. path.relative does the
+// comparison, which on Windows is case-insensitive — a plain string prefix test
+// would miss C:\HOMEBASE\Client against C:\Homebase\client.
+const isInside = (child, parent) => {
+    const rel = path.relative(parent, child)
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+// Uploaded bytes must never sit inside a directory a web server publishes.
+// Both halves of `client/` qualify: the reverse proxy serves `client/dist` as
+// static files in production, and the Vite dev server serves out of `client/`
+// itself in development. Either way every uploaded file becomes downloadable by
+// anyone who can guess the URL — no authentication, no ownership check, handed
+// out by a process that has never heard of either.
+//
+// This is the same rule as "uploads/ must never be served through
+// express.static", pointed at the other web server in the stack. Fatal rather
+// than a warning: the failure is silent, and it is unauthenticated disclosure
+// of every member's files.
+const CLIENT_DIR = path.join(REPO_ROOT, 'client')
+if (isInside(UPLOAD_ROOT, CLIENT_DIR)) {
+    fatal.push(
+        `UPLOAD_ROOT resolves to ${UPLOAD_ROOT}, which is inside ${CLIENT_DIR}. ` +
+        'That directory is served as static files, so every uploaded file would be ' +
+        'publicly downloadable. Point it outside client/.'
+    )
+}
+
 // ── Mail ─────────────────────────────────────────────────────────────────
 // These were read directly by config/mailer.js, which contradicted this file's
 // own "only place that reads process.env" contract and left the one piece of
@@ -186,6 +231,7 @@ module.exports = {
     TRUST_PROXY,
     MAX_UPLOAD_BYTES,
     USER_STORAGE_QUOTA_BYTES,
+    UPLOAD_ROOT,
     PASSWORD_MIN_LENGTH,
     PASSWORD_BREACH_CHECK,
     SMTP_HOST,

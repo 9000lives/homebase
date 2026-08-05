@@ -1,6 +1,5 @@
 const asyncHandler = require('express-async-handler')
 const fsp = require('fs/promises')
-const path = require('path')
 const File = require('../models/fileModel')
 const User = require('../models/userModel')
 const Folder = require('../models/folderModel')
@@ -14,6 +13,7 @@ const {
     resolveOwnedFolderDestination
 } = require('../utils/ownership')
 const { validateItemName } = require('../utils/names')
+const { toStoredPath, resolveStoredPath } = require('../utils/fileStorage')
 const { badRequest, forbidden, notFound } = require('../utils/httpError')
 const { log, audit, actorFrom } = require('../utils/logger')
 const { readPageParams, sendPage } = require('../utils/pagination')
@@ -67,7 +67,9 @@ const uploadFile = asyncHandler(async (req, res) => {
         // The VERIFIED type from magic-byte inspection, not the client's
         // declared Content-Type.
         mimeType:       req.verifiedType?.mime ?? req.file.mimetype,
-        storagePath:    req.file.path,
+        // Relative to UPLOAD_ROOT, so the configured location stays the one
+        // thing that decides where files live. See utils/fileStorage.js.
+        storagePath:    toStoredPath(req.file.path),
         parentFolderId
     })
 
@@ -123,11 +125,23 @@ const downloadFile = asyncHandler(async (req, res) => {
     if (!file) throw notFound('File not found')
     if (!(await canReadFile(file, req))) throw forbidden('Not authorized to access this file')
 
+    // A stored path that does not resolve inside UPLOAD_ROOT is a corrupt row,
+    // not merely one whose bytes are missing. Same outcome for the caller.
+    const absolutePath = resolveStoredPath(file.storagePath)
+    if (!absolutePath) {
+        log.error('download failed: storage path does not resolve', {
+            requestId: req.id,
+            fileId: file._id.toString(),
+            storagePath: file.storagePath
+        })
+        throw notFound('File not found')
+    }
+
     setFileServingHeaders(res)
 
     // res.download builds Content-Disposition through the `content-disposition`
     // package, which quotes, escapes and RFC 5987-encodes the filename.
-    res.download(path.resolve(file.storagePath), file.name, (error) => {
+    res.download(absolutePath, file.name, (error) => {
         if (!error) return
         // Headers are already sent by the time a stream error surfaces, so
         // there is no clean JSON error to send — log it and let the socket close.
@@ -155,6 +169,16 @@ const viewFile = asyncHandler(async (req, res) => {
     if (!file) throw notFound('File not found')
     if (!(await canReadFile(file, req))) throw forbidden('Not authorized to access this file')
 
+    const absolutePath = resolveStoredPath(file.storagePath)
+    if (!absolutePath) {
+        log.error('view failed: storage path does not resolve', {
+            requestId: req.id,
+            fileId: file._id.toString(),
+            storagePath: file.storagePath
+        })
+        throw notFound('File not found')
+    }
+
     setFileServingHeaders(res)
     // The stored type is now the one verified against the file's magic bytes at
     // upload, so echoing it here no longer reflects a client-chosen value.
@@ -164,7 +188,7 @@ const viewFile = asyncHandler(async (req, res) => {
     // it under a safely-encoded filename rather than the URL's last segment.
     res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`)
 
-    res.sendFile(path.resolve(file.storagePath), (error) => {
+    res.sendFile(absolutePath, (error) => {
         if (!error) return
         log.error('view failed', { requestId: req.id, fileId: file._id.toString(), error })
         if (!res.headersSent) res.status(404).json({ message: 'File not found', requestId: req.id })
@@ -263,16 +287,28 @@ const deleteFile = asyncHandler(async (req, res) => {
     // file was a denial-of-service primitive.
     await File.findByIdAndDelete(file._id)
 
-    try {
-        await fsp.unlink(path.resolve(file.storagePath))
-    } catch (error) {
-        // Already gone is the desired end state, not a failure.
-        if (error.code !== 'ENOENT') {
-            log.error('failed to unlink file from disk', {
-                requestId: req.id,
-                fileId: file._id.toString(),
-                error
-            })
+    const absolutePath = resolveStoredPath(file.storagePath)
+
+    // The row is already gone. An unresolvable path leaves bytes we cannot
+    // safely name, which is recoverable garbage — log it rather than guessing.
+    if (!absolutePath) {
+        log.error('cannot unlink file: storage path does not resolve', {
+            requestId: req.id,
+            fileId: file._id.toString(),
+            storagePath: file.storagePath
+        })
+    } else {
+        try {
+            await fsp.unlink(absolutePath)
+        } catch (error) {
+            // Already gone is the desired end state, not a failure.
+            if (error.code !== 'ENOENT') {
+                log.error('failed to unlink file from disk', {
+                    requestId: req.id,
+                    fileId: file._id.toString(),
+                    error
+                })
+            }
         }
     }
 

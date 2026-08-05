@@ -46,6 +46,10 @@ const User = require('../models/userModel')
 const { signPreAuthToken, signSessionToken } = require('../utils/tokens')
 const { validateItemName, sanitizePathSegment } = require('../utils/names')
 const { detectType, matchDangerous } = require('../utils/fileSignature')
+// From configuration, not a second hardcoded copy of the path — otherwise
+// setting UPLOAD_ROOT makes this suite assert against a directory the
+// application no longer writes to, and the orphan-cleanup test passes vacuously.
+const { UPLOAD_ROOT } = require('../config/env')
 
 const BASE = `http://127.0.0.1:${process.env.PORT}/api`
 const PASSWORD = 'correct-horse-battery-staple-77'
@@ -291,11 +295,21 @@ test('H5: a genuine file is accepted and stored under the verified type', async 
     // The on-disk name is a server-generated UUID plus the VERIFIED extension —
     // never anything derived from the client's filename.
     assert.match(path.basename(r.body.storagePath), /^[0-9a-f-]{36}\.png$/)
+
+    // Stored RELATIVE to UPLOAD_ROOT, POSIX-separated, as `<userId>/<uuid>.<ext>`.
+    // An absolute path would freeze the storage location into the row and, since
+    // this field is echoed to the client, disclose the server's filesystem layout.
+    assert.ok(!path.isAbsolute(r.body.storagePath), 'storagePath must not be absolute')
+    assert.doesNotMatch(r.body.storagePath, /\\/, 'storagePath must use POSIX separators')
+    assert.match(r.body.storagePath, /^[0-9a-f]{24}\/[0-9a-f-]{36}\.png$/)
+
+    // …and it must resolve back to the bytes that were just written.
+    await fs.access(path.resolve(UPLOAD_ROOT, r.body.storagePath))
 })
 
 // ── H6: quota and orphan cleanup ──────────────────────────────────────────
 test('H6: a rejected upload leaves no bytes on disk', async () => {
-    const userDir = path.join(__dirname, '..', 'uploads', alice.id)
+    const userDir = path.join(UPLOAD_ROOT, alice.id)
     const count = async () => {
         try { return (await fs.readdir(userDir)).length } catch { return 0 }
     }
@@ -387,8 +401,8 @@ test('H3: a dangling file record does not crash the zip download', async () => {
     })
 
     // Simulate the disk/database divergence that used to arm the crash: the row
-    // survives, the bytes do not.
-    await fs.unlink(orphan.body.storagePath)
+    // survives, the bytes do not. storagePath is relative to UPLOAD_ROOT.
+    await fs.unlink(path.resolve(UPLOAD_ROOT, orphan.body.storagePath))
 
     const res = await fetch(`${BASE}/folders/${folder.body._id}/download`, {
         headers: { Authorization: `Bearer ${alice.token}` }
@@ -404,7 +418,7 @@ test('H3: a dangling file record does not crash the zip download', async () => {
 
 test('H3: deleting a file whose bytes are already gone still succeeds', async () => {
     const file = await upload(alice.token, { bytes: PNG, filename: 'twice.png', contentType: 'image/png' })
-    await fs.unlink(file.body.storagePath)
+    await fs.unlink(path.resolve(UPLOAD_ROOT, file.body.storagePath))
 
     // ENOENT on unlink is the desired end state, not a failure — the row must
     // still be removed rather than the handler aborting and leaving it behind.

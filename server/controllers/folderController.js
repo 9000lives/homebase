@@ -1,6 +1,5 @@
 const asyncHandler = require('express-async-handler')
 const fsp = require('fs/promises')
-const path = require('path')
 const { ZipArchive } = require('archiver')
 const Folder = require('../models/folderModel')
 const File = require('../models/fileModel')
@@ -16,6 +15,7 @@ const {
     resolveOwnedFolderDestination
 } = require('../utils/ownership')
 const { validateItemName, sanitizePathSegment } = require('../utils/names')
+const { resolveStoredPath } = require('../utils/fileStorage')
 const { badRequest, forbidden, notFound } = require('../utils/httpError')
 const { log, audit, actorFrom } = require('../utils/logger')
 const { readPageParams, sendPage } = require('../utils/pagination')
@@ -202,8 +202,16 @@ async function deleteFolderFromDB(folderId, ownerId, depth = 0) {
     for (let i = 0; i < files.length; i += CONCURRENCY) {
         await Promise.all(
             files.slice(i, i + CONCURRENCY).map(async (file) => {
+                const absolutePath = resolveStoredPath(file.storagePath)
+                if (!absolutePath) {
+                    log.error('cannot unlink file during folder delete: path does not resolve', {
+                        fileId: file._id.toString(),
+                        storagePath: file.storagePath
+                    })
+                    return
+                }
                 try {
-                    await fsp.unlink(path.resolve(file.storagePath))
+                    await fsp.unlink(absolutePath)
                 } catch (error) {
                     if (error.code !== 'ENOENT') {
                         log.error('failed to unlink file during folder delete', {
@@ -286,7 +294,17 @@ async function addFolderToArchive(archive, folderId, ownerId, prefix, depth = 0)
     const files = await File.find({ parentFolderId: folderId, ownerId }).select('name storagePath')
 
     for (const file of files) {
-        const resolved = path.resolve(file.storagePath)
+        const resolved = resolveStoredPath(file.storagePath)
+
+        // Skip rows whose path does not resolve, for the same reason as ones
+        // whose bytes are gone: archiver would emit the error mid-stream.
+        if (!resolved) {
+            log.error('archive skipped file: storage path does not resolve', {
+                fileId: file._id.toString(),
+                storagePath: file.storagePath
+            })
+            continue
+        }
 
         // Skip rows whose bytes are missing rather than letting archiver emit
         // ENOENT mid-stream. A partial archive beats a destroyed connection,

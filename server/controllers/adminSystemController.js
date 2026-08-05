@@ -4,8 +4,8 @@ const fsp = require('fs/promises')
 const File = require('../models/fileModel')
 const { sendMail } = require('../config/mailer')
 const { audit, actorFrom } = require('../utils/logger')
-const { UPLOAD_ROOT } = require('../middleware/uploadMiddleware')
 const env = require('../config/env')
+const { UPLOAD_ROOT } = env
 
 const CONNECTION_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting']
 

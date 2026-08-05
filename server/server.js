@@ -11,6 +11,7 @@ const crypto = require('crypto')
 const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
+const mongoose = require('mongoose')
 
 const connectDB = require('./config/db')
 const { errorHandler, notFoundHandler } = require('./middleware/errorMiddleware')
@@ -144,6 +145,34 @@ app.use((req, res, next) => {
     next()
 })
 
+// Liveness/readiness probe.
+//
+// Public and unauthenticated by necessity: a process supervisor, a reverse
+// proxy's upstream check and an external uptime monitor cannot present a JWT.
+// The detailed panel — database state, mail configuration, disk figures, Node
+// version — stays behind GET /api/admin/system/health. An endpoint anyone can
+// reach must not describe the deployment to whoever asks, so this one answers
+// exactly one question: can this process serve a request right now?
+//
+// Mounted BEFORE globalLimiter deliberately. A probe running every few seconds
+// would otherwise spend the shared per-IP budget that real traffic needs — and
+// behind a proxy every probe arrives from the same address as every user, so
+// they compete for one bucket. Leaving it unlimited is safe because the handler
+// does no I/O: readyState is an in-memory integer on the Mongoose connection,
+// not a round trip to the database. A probe that queried Mongo would turn this
+// into an amplifier, where one cheap request costs a database operation.
+//
+// Nothing is logged here for the same reason — one line per probe every few
+// seconds buries the log volume that matters.
+//
+// 503 rather than 200 when the database is unreachable, so a proxy configured
+// with an upstream health check pulls this instance rather than serving
+// requests that can only fail once they reach a controller.
+app.get('/health', (req, res) => {
+    const dbConnected = mongoose.connection.readyState === 1
+    res.status(dbConnected ? 200 : 503).json({ status: dbConnected ? 'ok' : 'degraded' })
+})
+
 // Backstop limiter for every route, including any added without their own.
 app.use(globalLimiter)
 
@@ -167,6 +196,70 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 const server = app.listen(PORT, () => log.info('server started', { port: PORT, env: NODE_ENV }))
+
+// Graceful shutdown.
+//
+// Without this, stopping the service terminates the process mid-request. An
+// upload in flight is lost, and — worse because it fails silently — a zip
+// download is truncated into an archive the client cannot distinguish from a
+// complete one.
+//
+// WINDOWS SIGNALS: SIGTERM is never delivered on Windows. Node permits
+// listening for it and it simply never fires. The service wrapper
+// (deploy/homebase-service.xml) stops this process with a console Ctrl+C /
+// Ctrl+Break event, which arrives as SIGINT / SIGBREAK. A SIGTERM-only handler
+// — the Linux-idiomatic version — would read correctly, pass review, and do
+// nothing whatsoever in production here. All three are registered so this works
+// under the Windows service, a container, and a POSIX host alike.
+const SHUTDOWN_GRACE_MS = 10_000
+
+let shuttingDown = false
+
+const shutdown = async (signal) => {
+    // A second Ctrl+C, or SIGINT and SIGBREAK arriving together, must not
+    // restart a drain that is already running.
+    if (shuttingDown) return
+    shuttingDown = true
+
+    log.info('shutdown started', { signal, graceMs: SHUTDOWN_GRACE_MS })
+
+    // Backstop. A client holding a connection open without completing its
+    // request would otherwise stall the drain indefinitely. This must stay
+    // BELOW the wrapper's <stoptimeout> (15s) or the wrapper kills the process
+    // first and none of this is ever reported. unref() so the timer itself
+    // cannot be the thing keeping the event loop alive.
+    const force = setTimeout(() => {
+        log.error('shutdown timed out, forcing exit', { signal })
+        process.exit(1)
+    }, SHUTDOWN_GRACE_MS)
+    force.unref()
+
+    try {
+        // close() stops accepting new connections and resolves once in-flight
+        // requests finish. It does NOT drop idle keep-alive sockets — those
+        // will never send another request but still count as open, so without
+        // closing them explicitly the drain waits for their full timeout.
+        const drained = new Promise((resolve, reject) =>
+            server.close((err) => (err ? reject(err) : resolve()))
+        )
+        server.closeIdleConnections()
+        await drained
+
+        // Only after HTTP has drained. A request still finishing its work needs
+        // the database connection to be there.
+        await mongoose.connection.close(false)
+
+        log.info('shutdown complete', { signal })
+        process.exit(0)
+    } catch (error) {
+        log.error('shutdown failed', { signal, error })
+        process.exit(1)
+    }
+}
+
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGBREAK']) {
+    process.on(signal, () => shutdown(signal))
+}
 
 // Exported so the test suite can start the real application and shut it down
 // afterward, rather than testing a parallel wiring that could drift from this one.

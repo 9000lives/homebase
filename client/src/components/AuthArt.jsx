@@ -38,8 +38,8 @@
 
 import React from 'react';
 
-// import cabinetAnimation from '../assets/cabinet-animation.svg';
-const ART_SRC = null;
+import cabinetAnimation from '../assets/cabinet-animation.svg';
+const ART_SRC = cabinetAnimation;
 
 // aria-hidden: the panel is decoration. It carries no information the
 // form doesn't already give, so it stays out of the accessibility tree.

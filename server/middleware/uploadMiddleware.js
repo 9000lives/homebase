@@ -27,12 +27,10 @@ const { v4: uuidv4 } = require('uuid')
 const asyncHandler = require('express-async-handler')
 
 const File = require('../models/fileModel')
-const { MAX_UPLOAD_BYTES, USER_STORAGE_QUOTA_BYTES } = require('../config/env')
+const { MAX_UPLOAD_BYTES, USER_STORAGE_QUOTA_BYTES, UPLOAD_ROOT } = require('../config/env')
 const { SAMPLE_BYTES, ALLOWED_TYPES, detectType, matchDangerous } = require('../utils/fileSignature')
 const { payloadTooLarge, unsupportedMediaType, badRequest } = require('../utils/httpError')
 const { log } = require('../utils/logger')
-
-const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads')
 
 // Total bytes currently attributed to a user. Same aggregation the admin
 // dashboard uses for its per-user figure, so the two can never disagree.
@@ -175,10 +173,12 @@ const verifyUploadedFile = asyncHandler(async (req, res, next) => {
     next()
 })
 
+// UPLOAD_ROOT is deliberately NOT re-exported here. It is configuration, and it
+// comes from config/env.js like every other setting — two import paths for one
+// value is exactly how the two drift apart later.
 module.exports = {
     upload,
     enforceStorageQuota,
     verifyUploadedFile,
-    getUserStorageBytes,
-    UPLOAD_ROOT
+    getUserStorageBytes
 }

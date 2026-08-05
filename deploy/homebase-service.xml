@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Homebase API — Windows service definition (WinSW).
+
+  Node has no native Windows service support: `node server\server.js` in a
+  console dies with the session and never comes back after a reboot. WinSW is a
+  wrapper .exe that registers the process with the Service Control Manager,
+  restarts it on failure, and captures stdout/stderr to rotating files.
+
+  WinSW rather than NSSM: NSSM's last release was 2017 and it keeps its
+  configuration in the registry, where it cannot be reviewed in a diff or
+  restored with the rest of the repository. This file is the whole
+  configuration, and it is version-controlled.
+
+  ── Install ────────────────────────────────────────────────────────────────
+  Run every command in an ELEVATED PowerShell.
+
+    # 1. Lay the application down outside any web-served directory.
+    git clone <repo> C:\Homebase
+    cd C:\Homebase
+    npm ci --omit=dev
+    npm --prefix client ci
+    npm --prefix client run build        # produces client\dist for Caddy
+
+    # 2. Create .env (see .env.example) and lock it down. It holds MONGO_URI
+    #    and SMTP_PASS in plaintext, so it must not be world-readable.
+    icacls C:\Homebase\.env /inheritance:r
+    icacls C:\Homebase\.env /grant "Administrators:(R)" "NT SERVICE\homebase:(R)"
+
+    # 3. The one directory the service writes to. Everything else can be
+    #    read-only to the service account.
+    #    This path must match UPLOAD_ROOT in .env. It defaults to
+    #    C:\Homebase\server\uploads; if you point UPLOAD_ROOT at another volume
+    #    (D:\HomebaseData\uploads is the usual reason — file bytes are the one
+    #    thing here that grows without bound), grant the service account write
+    #    access THERE instead, or the first upload fails on permissions.
+    New-Item -ItemType Directory -Force C:\Homebase\server\uploads
+    icacls C:\Homebase\server\uploads /grant "NT SERVICE\homebase:(OI)(CI)(M)"
+    New-Item -ItemType Directory -Force C:\ProgramData\Homebase\logs
+    icacls C:\ProgramData\Homebase\logs /grant "NT SERVICE\homebase:(OI)(CI)(M)"
+
+    # 4. Fetch WinSW, name the .exe to match this file, install.
+    #    https://github.com/winsw/winsw/releases  (WinSW-x64.exe)
+    Copy-Item WinSW-x64.exe C:\Homebase\deploy\homebase-service.exe
+    C:\Homebase\deploy\homebase-service.exe install
+    C:\Homebase\deploy\homebase-service.exe start
+
+  ── Operate ────────────────────────────────────────────────────────────────
+    Get-Service homebase
+    Restart-Service homebase              # after a pull or a .env change
+    Stop-Service homebase
+    Get-Content C:\ProgramData\Homebase\logs\homebase.out.log -Tail 50 -Wait
+
+    C:\Homebase\deploy\homebase-service.exe uninstall
+
+  Logs are structured JSON on stdout under NODE_ENV=production. WinSW captures
+  and rotates them; do not add a logfile from inside the application (`*.log`
+  is gitignored so that nobody starts).
+-->
+<service>
+  <id>homebase</id>
+  <name>Homebase API</name>
+  <description>Homebase — self-hosted file storage API (Node/Express).</description>
+
+  <!-- Verify with `(Get-Command node).Source`. A Node upgrade that relocates
+       the binary breaks startup, and the failure appears in homebase.wrapper.log
+       rather than the application log. -->
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>server\server.js</arguments>
+  <workingdirectory>C:\Homebase</workingdirectory>
+
+  <!-- NODE_ENV is set here, not in .env, because it is a property of THIS
+       deployment rather than of the application. It gates HSTS and JSON log
+       formatting. dotenv does not override an already-set variable, so this
+       wins even if .env also names it.
+
+       Everything else is deliberately absent: config/env.js loads .env itself
+       and resolves it relative to its own directory rather than the working
+       directory (server/config/env.js:16), so it is found regardless of how the
+       process is started. Restating those values here would create a second
+       source of truth for every one of them. -->
+  <env name="NODE_ENV" value="production"/>
+
+  <startmode>Automatic</startmode>
+  <!-- Lets networking and DNS settle before the first Mongo connection attempt.
+       config/db.js exits the process if the cluster is unreachable at startup,
+       so racing the network here costs a restart cycle on every boot. -->
+  <delayedAutoStart>true</delayedAutoStart>
+
+  <!-- The application exits 1 rather than limping on a bad configuration:
+       config/env.js refuses to boot without MONGO_URI / JWT_SECRET /
+       CORS_ORIGINS, and config/db.js exits when the cluster is unreachable.
+       Backing off and then giving up is what a configuration error should look
+       like — an unbounded restart loop hides it. After the third failure the
+       service stays stopped and Get-Service reports it. -->
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="20 sec"/>
+  <onfailure action="none"/>
+  <resetfailure>1 hour</resetfailure>
+
+  <!-- A virtual service account: Windows creates NT SERVICE\homebase for this
+       service alone, with no password and no interactive logon. It is the
+       equivalent of a dedicated system user, and the reason the install steps
+       grant it write access to exactly two directories. Do NOT run this as
+       LocalSystem — the process handles untrusted uploaded bytes. -->
+  <serviceaccount>
+    <username>NT SERVICE\homebase</username>
+    <allowservicelogon>true</allowservicelogon>
+  </serviceaccount>
+
+  <log mode="roll-by-size-time">
+    <logpath>C:\ProgramData\Homebase\logs</logpath>
+    <sizeThreshold>10240</sizeThreshold>
+    <pattern>yyyyMMdd</pattern>
+    <autoRollAtTime>00:00:00</autoRollAtTime>
+    <keepFiles>30</keepFiles>
+  </log>
+
+  <!-- WinSW stops the process with a console Ctrl+C / Ctrl+Break event, which
+       Node receives as SIGINT / SIGBREAK. server.js listens for both (SIGTERM
+       too, though Windows never delivers it) and drains in-flight requests
+       before exiting.
+
+       This 15s must stay ABOVE the SHUTDOWN_GRACE_MS constant in server.js
+       (10s). The application gives itself 10 seconds to drain and then forces
+       its own exit; WinSW's timeout is the outer bound that steps in only if
+       the process ignores the signal entirely. Invert the two and WinSW kills
+       the process mid-drain, which is the behaviour both are there to avoid. -->
+  <stoptimeout>15 sec</stoptimeout>
+  <stopparentprocessfirst>true</stopparentprocessfirst>
+</service>

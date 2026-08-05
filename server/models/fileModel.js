@@ -22,6 +22,10 @@ const fileSchema = mongoose.Schema({
     mimeType: {
         type: String
     },
+    // Path to the bytes on disk, RELATIVE to UPLOAD_ROOT and POSIX-separated
+    // (`<userId>/<uuid>.<ext>`). Never absolute: that would freeze the storage
+    // location into every row, and this field is echoed back to the client.
+    // Always read it through utils/fileStorage.js resolveStoredPath().
     storagePath: {
         type: String
     },
